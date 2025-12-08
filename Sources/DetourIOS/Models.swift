@@ -35,9 +35,8 @@ public struct DetourResult {
     public let processed: Bool
     public let link: URL?
     public let route: String?
-    
+
     static func empty() -> DetourResult {
         return DetourResult(processed: true, link: nil, route: nil)
     }
 }
-
