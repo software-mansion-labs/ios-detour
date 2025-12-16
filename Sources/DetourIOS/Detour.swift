@@ -12,7 +12,11 @@ public class Detour {
 
     private init() {} // Private init to force use of 'shared'
 
-    public func identify(config: DetourConfig, completion: @escaping @Sendable (DetourResult) -> Void) {
+    public func identify(
+        config: DetourConfig,
+        launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
         self.config = config
 
         if isSessionHandled {
@@ -22,6 +26,23 @@ public class Detour {
             return
         }
         isSessionHandled = true
+        
+        
+        if let connectionOptions = launchOptions?[.url] as? URL {
+            print("🔗 [Detour] Found Initial Universal Link: \(connectionOptions)")
+            
+            StorageUtils.markFirstEntrance()
+            
+            let extractedRoute = LinkUtils.extractRoute(from: connectionOptions)
+            let result = DetourResult(
+                processed: true,
+                link: connectionOptions,
+                route: extractedRoute
+            )
+            DispatchQueue.main.async { completion(result) }
+            return
+        }
+        
 
         if !StorageUtils.isFirstEntrance() {
             print("[Detour]:Not first entrance")
@@ -33,8 +54,10 @@ public class Detour {
 
         StorageUtils.markFirstEntrance()
 
-        let fingerprint = DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
-
-        DetourNetwork.matchLink(config: config, fingerprint: fingerprint, completion: completion)
+        Task {
+            let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
+            
+            DetourNetwork.matchLink(config: config, fingerprint: fingerprint, completion: completion)
+        }
     }
 }

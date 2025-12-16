@@ -1,22 +1,52 @@
 import UIKit
+import WebKit
 
 class DeviceUtils {
-    static func getFingerprint(shouldUseClipboard: Bool) -> ProbabilisticFingerprint {
+    
+    @MainActor
+    private static var webView: WKWebView?
+        
+        @MainActor
+        private static func getRealUserAgent() async -> String {
+            return await withCheckedContinuation { continuation in
+                
+                webView = WKWebView()
+                
+                webView?.evaluateJavaScript("navigator.userAgent") { result, error in
+                    
+                    if let error = error {
+                        print("⚠️ [Detour] WebKit Error: \(error.localizedDescription)")
+                    }
+
+                    if let ua = result as? String {
+                        continuation.resume(returning: ua)
+                    } else {
+                        print("⚠️ [Detour] Could not retrieve WebKit User Agent. Result was nil.")
+                        continuation.resume(returning: "")
+                    }
+                    
+                    webView = nil
+                }
+            }
+        }
+    
+    @MainActor
+    static func getFingerprint(shouldUseClipboard: Bool) async -> ProbabilisticFingerprint {
         let device = UIDevice.current
         let screen = UIScreen.main
 
-        // Handling Clipboard (UIPasteboard)
         var pastedLink: String? = nil
         if shouldUseClipboard && UIPasteboard.general.hasStrings {
             pastedLink = UIPasteboard.general.string
         }
 
-        // Handling Locales
         let locales = Locale.preferredLanguages.map { LocaleTag(languageTag: $0) }
+        
+        let userAgent = await getRealUserAgent()
 
         return ProbabilisticFingerprint(
-            platform: "ios", // Platform.OS
-            model: device.model, // Simple model name. specific model identifiers require more code
+            platform: "ios",
+            model: device.model,
             manufacturer: "Apple",
             systemVersion: device.systemVersion,
             screenWidth: Double(screen.bounds.width),
@@ -24,7 +54,7 @@ class DeviceUtils {
             scale: Double(screen.scale),
             locale: locales,
             timezone: TimeZone.current.identifier,
-            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS \(device.systemVersion.replacingOccurrences(of: ".", with: "_")) like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148", // Simplified UA
+            userAgent: userAgent,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
             pastedLink: pastedLink
         )
