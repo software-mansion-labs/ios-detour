@@ -73,7 +73,6 @@ class DetourNetwork {
                let linkString = json["link"] as? String,
                let url = URL(string: linkString)
             {
-                // Use LinkUtils to process the route
                 let route = LinkUtils.extractRoute(from: url)
                 let result = DetourResult(processed: true, link: url, route: route)
 
