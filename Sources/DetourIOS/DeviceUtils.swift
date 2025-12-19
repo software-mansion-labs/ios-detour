@@ -35,9 +35,21 @@ class DeviceUtils {
         let device = UIDevice.current
         let screen = UIScreen.main
 
-        var pastedLink: String? = nil
-        if shouldUseClipboard && UIPasteboard.general.hasStrings {
-            pastedLink = UIPasteboard.general.string
+        var pastedLink: String?
+        if shouldUseClipboard {
+            let clipboardContent = await MainActor.run {
+                UIPasteboard.general.string
+            }
+            
+            // VALIDATION: Only accept if it's a valid web URL
+            if let content = clipboardContent,
+               let url = URL(string: content),
+               let scheme = url.scheme,
+               ["http", "https"].contains(scheme.lowercased()),
+               url.host != nil {
+                
+                pastedLink = content
+            }
         }
 
         let locales = Locale.preferredLanguages.map { LocaleTag(languageTag: $0) }

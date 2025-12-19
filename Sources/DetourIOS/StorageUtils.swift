@@ -1,13 +1,16 @@
 import Foundation
 
 class StorageUtils {
-    private static let key = "DetourFirstEntranceFlag"
+    
+    private enum Constants {
+        static let firstEntranceKey = "DetourFirstEntranceFlag"
+    }
 
     static func isFirstEntrance() -> Bool {
-        return !UserDefaults.standard.bool(forKey: key)
+        return !UserDefaults.standard.bool(forKey: Constants.firstEntranceKey)
     }
 
     static func markFirstEntrance() {
-        UserDefaults.standard.set(true, forKey: key)
+        UserDefaults.standard.set(true, forKey: Constants.firstEntranceKey)
     }
 }

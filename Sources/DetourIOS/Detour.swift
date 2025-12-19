@@ -6,7 +6,6 @@ import UIKit
 public class Detour {
     public static let shared = Detour()
     
-    private var config: DetourConfig?
     private var isSessionHandled = false
     
     private init() {} // Private init to force use of 'shared'
@@ -23,9 +22,8 @@ public class Detour {
             launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
             completion: @escaping @Sendable (DetourResult) -> Void
         ) {
-            self.config = config
             
-            func returnEmpty() { DispatchQueue.main.async { completion(.empty()) } }
+            func returnEmpty() { completion(.empty()) }
             
             if isSessionHandled { returnEmpty(); return }
             isSessionHandled = true
@@ -57,7 +55,5 @@ public class Detour {
                 DetourNetwork.matchLink(config: config, fingerprint: fingerprint, completion: completion)
             }
         }
-    
-
     
 }

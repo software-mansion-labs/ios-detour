@@ -1,11 +1,33 @@
 import Foundation
 
 class DetourNetwork {
-    private static let apiUrl = URL(string: "https://godetour.dev/api/link/match-link")!
+    
+    private static func logAndFail(
+        _ message: String,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        // 🔗 Standardized Library Prefix
+        print("🔗 [Detour] ❌ \(message)")
+        
+        // Always dispatch back to main thread
+        DispatchQueue.main.async {
+            completion(.empty())
+        }
+    }
 
     static func matchLink(config: DetourConfig, fingerprint: ProbabilisticFingerprint, completion: @escaping @Sendable (DetourResult) -> Void) {
-        guard let httpBody = try? JSONEncoder().encode(fingerprint) else {
-            DispatchQueue.main.async { completion(.empty()) }
+        
+        guard let apiUrl = DetourConstants.apiUrl else {
+            logAndFail("Configuration Error: Invalid API URL", completion: completion)
+            return
+        }
+        
+        let httpBody: Data
+        do {
+            httpBody = try JSONEncoder().encode(fingerprint)
+        } catch {
+            
+            logAndFail("Encoding Error: Failed to encode fingerprint - \(error.localizedDescription)", completion: completion)
             return
         }
 
@@ -28,9 +50,8 @@ class DetourNetwork {
         }
 
         // 1. Transport Errors
-        if let error = error {
-            printError(error.localizedDescription)
-            DispatchQueue.main.async { completion(.empty()) }
+        if let transportError = error {
+            logAndFail("Network Error: \(transportError.localizedDescription)", completion: completion)
             return
         }
 
@@ -44,32 +65,31 @@ class DetourNetwork {
             var errorMessage = "Request failed"
 
             // Attempt to extract server error message
-            if let data = data,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            if let errorData = data,
+               let json = try? JSONSerialization.jsonObject(with: errorData) as? [String: Any],
                let errorContent = json["error"]
             {
                 if let strError = errorContent as? String {
                     errorMessage = strError
-                } else if let data = try? JSONSerialization.data(withJSONObject: errorContent),
-                          let strified = String(data: data, encoding: .utf8)
+                } else if let errorBytes = try? JSONSerialization.data(withJSONObject: errorContent),
+                          let strified = String(data: errorBytes, encoding: .utf8)
                 {
                     errorMessage = strified
                 }
             }
 
-            printError("[\(httpResponse.statusCode)] \(errorMessage)")
-            DispatchQueue.main.async { completion(.empty()) }
+            logAndFail("Server Error: \(errorMessage)", completion: completion)
             return
         }
 
         // 3. Success Parsing
-        guard let data = data else {
-            DispatchQueue.main.async { completion(.empty()) }
+        guard let responseData = data else {
+            logAndFail("Parsing Error: Response data was nil", completion: completion)
             return
         }
 
         do {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            if let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
                let linkString = json["link"] as? String,
                let url = URL(string: linkString)
             {
@@ -82,8 +102,7 @@ class DetourNetwork {
                 DispatchQueue.main.async { completion(.empty()) }
             }
         } catch {
-            printError(error.localizedDescription)
-            DispatchQueue.main.async { completion(.empty()) }
+            logAndFail("JSON Parsing Error: \(error.localizedDescription)", completion: completion)
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 class LinkUtils {
-    static func getRestOfPath(_ pathname: String) -> String {
+    private static func getRestOfPath(_ pathname: String) -> String {
         // Safety check: needs at least 2 chars (e.g. "/a") to possibly have a second slash
         if pathname.count < 2 { return "/" }
 

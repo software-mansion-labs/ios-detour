@@ -21,7 +21,7 @@ struct ProbabilisticFingerprint: Codable {
     let screenHeight: Double
     let scale: Double
     let locale: [LocaleTag]
-    let timezone: String?
+    let timezone: String
     let userAgent: String
     let timestamp: Int64
     let pastedLink: String?
@@ -35,8 +35,14 @@ public struct DetourResult {
     public let processed: Bool
     public let link: URL?
     public let route: String?
+    
+    public init(processed: Bool, link: URL?, route: String?) {
+            self.processed = processed
+            self.link = link
+            self.route = route
+        }
 
-    static func empty() -> DetourResult {
+    public static func empty() -> DetourResult {
         return DetourResult(processed: true, link: nil, route: nil)
     }
 }
