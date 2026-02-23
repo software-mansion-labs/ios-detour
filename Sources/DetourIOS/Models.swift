@@ -1,6 +1,6 @@
 import Foundation
 
-public struct DetourConfig {
+public struct DetourConfig: Sendable {
     public let apiKey: String
     public let appId: String
     public let shouldUseClipboard: Bool
@@ -10,6 +10,12 @@ public struct DetourConfig {
         self.appId = appId
         self.shouldUseClipboard = shouldUseClipboard
     }
+}
+
+public enum LinkType: String, Codable, Sendable {
+    case deferred
+    case verified
+    case scheme
 }
 
 struct ProbabilisticFingerprint: Codable {
@@ -31,18 +37,20 @@ struct LocaleTag: Codable {
     let languageTag: String
 }
 
-public struct DetourResult {
+public struct DetourResult: Sendable {
     public let processed: Bool
     public let link: URL?
     public let route: String?
+    public let linkType: LinkType?
     
-    public init(processed: Bool, link: URL?, route: String?) {
+    public init(processed: Bool, link: URL?, route: String?, linkType: LinkType? = nil) {
             self.processed = processed
             self.link = link
             self.route = route
+            self.linkType = linkType
         }
 
     public static func empty() -> DetourResult {
-        return DetourResult(processed: true, link: nil, route: nil)
+        return DetourResult(processed: true, link: nil, route: nil, linkType: nil)
     }
 }
