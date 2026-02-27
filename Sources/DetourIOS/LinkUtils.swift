@@ -22,8 +22,6 @@ class LinkUtils {
             return true
         }
 
-        if rawUrl.contains("expo-development-client") { return true }
-        if rawUrl.hasPrefix("exp://") || rawUrl.hasPrefix("exps://") { return true }
         if rawUrl == "about:blank" { return true }
 
         return false
