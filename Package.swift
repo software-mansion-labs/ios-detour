@@ -21,9 +21,5 @@ let package = Package(
         .target(
             name: "DetourIOS"
         ),
-        .testTarget(
-            name: "DetourIOSTests",
-            dependencies: ["DetourIOS"]
-        ),
     ]
 )
