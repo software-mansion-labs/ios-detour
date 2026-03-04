@@ -6,7 +6,7 @@ class DetourNetwork {
         _ message: String,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
-        print("🔗 [Detour] ❌ \(message)")
+        print("🔗[Detour:NETWORK_ERROR] \(message)")
 
         DispatchQueue.main.async {
             completion(.empty())
