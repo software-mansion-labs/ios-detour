@@ -19,7 +19,7 @@
 
 ## Integration Steps
 
-1. Add `DetourIOS` package to your app target.
+1. Add `Detour` package to your app target.
 2. Copy `AppDelegate.swift`, `ContentView.swift`, and `DetourDemoState.swift` into your app.
 3. Replace all placeholders.
 4. Configure URL scheme in `Info.plist`.

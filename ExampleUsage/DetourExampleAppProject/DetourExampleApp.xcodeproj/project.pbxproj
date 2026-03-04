@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A4CFC2D12F4779EA007F84E5 /* DetourIOS in Frameworks */ = {isa = PBXBuildFile; productRef = A4CFC2D02F4779EA007F84E5 /* DetourIOS */; };
+		A4CFC2D12F4779EA007F84E5 /* Detour in Frameworks */ = {isa = PBXBuildFile; productRef = A4CFC2D02F4779EA007F84E5 /* Detour */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,7 +29,7 @@
 
 /* Begin PBXFileReference section */
 		A4CFC2CE2F477979007F84E5 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Package.swift; path = ../../Package.swift; sourceTree = "<group>"; };
-		A4CFC2CF2F4779D2007F84E5 /* DetourIOS */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = DetourIOS; path = ../..; sourceTree = SOURCE_ROOT; };
+		A4CFC2CF2F4779D2007F84E5 /* Detour */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Detour; path = ../..; sourceTree = SOURCE_ROOT; };
 		A4D1E0EE2EDDACAA004FA209 /* DetourExampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DetourExampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4D1E1002EDDACAC004FA209 /* DetourExampleAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DetourExampleAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4D1E10A2EDDACAC004FA209 /* DetourExampleAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DetourExampleAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -71,7 +71,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A4CFC2D12F4779EA007F84E5 /* DetourIOS in Frameworks */,
+				A4CFC2D12F4779EA007F84E5 /* Detour in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,7 +116,7 @@
 		A4D1E11E2EDDAF13004FA209 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				A4CFC2CF2F4779D2007F84E5 /* DetourIOS */,
+				A4CFC2CF2F4779D2007F84E5 /* Detour */,
 				A4CFC2CE2F477979007F84E5 /* Package.swift */,
 			);
 			name = Frameworks;
@@ -142,7 +142,7 @@
 			);
 			name = DetourExampleApp;
 			packageProductDependencies = (
-				A4CFC2D02F4779EA007F84E5 /* DetourIOS */,
+				A4CFC2D02F4779EA007F84E5 /* Detour */,
 			);
 			productName = DetourExampleApp;
 			productReference = A4D1E0EE2EDDACAA004FA209 /* DetourExampleApp.app */;
@@ -623,10 +623,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A4CFC2D02F4779EA007F84E5 /* DetourIOS */ = {
+		A4CFC2D02F4779EA007F84E5 /* Detour */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A4CFC2D22F477A0B007F84E5 /* XCLocalSwiftPackageReference "../.." */;
-			productName = DetourIOS;
+			productName = Detour;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,5 +1,5 @@
 import SwiftUI
-import DetourIOS
+import Detour
 
 struct ContentView: View {
     @ObservedObject private var demoState = DetourDemoState.shared
@@ -20,7 +20,7 @@ struct ContentView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("DetourIOS ExampleUsage Template")
+                        Text("Detour ExampleUsage Template")
                             .font(.title)
                             .bold()
 

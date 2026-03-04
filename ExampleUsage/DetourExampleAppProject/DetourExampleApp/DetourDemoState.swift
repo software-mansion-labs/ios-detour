@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import DetourIOS
+import Detour
 
 @MainActor
 final class DetourDemoState: ObservableObject {

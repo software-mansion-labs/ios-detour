@@ -1,6 +1,6 @@
 import UIKit
 import SwiftUI
-import DetourIOS
+import Detour
 import os
 
 @main
