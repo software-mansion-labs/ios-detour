@@ -4,26 +4,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "DetourIOS",
+    name: "Detour",
     platforms: [
         .iOS(.v13),
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "DetourIOS",
-            targets: ["DetourIOS"]
+            name: "Detour",
+            targets: ["Detour"]
         ),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "DetourIOS"
-        ),
-        .testTarget(
-            name: "DetourIOSTests",
-            dependencies: ["DetourIOS"]
+            name: "Detour"
         ),
     ]
 )

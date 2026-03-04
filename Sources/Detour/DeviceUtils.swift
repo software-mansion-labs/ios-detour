@@ -37,18 +37,8 @@ class DeviceUtils {
 
         var pastedLink: String?
         if shouldUseClipboard {
-            let clipboardContent = await MainActor.run {
+            pastedLink = await MainActor.run {
                 UIPasteboard.general.string
-            }
-            
-            // VALIDATION: Only accept if it's a valid web URL
-            if let content = clipboardContent,
-               let url = URL(string: content),
-               let scheme = url.scheme,
-               ["http", "https"].contains(scheme.lowercased()),
-               url.host != nil {
-                
-                pastedLink = content
             }
         }
 

@@ -2,8 +2,9 @@ import Foundation
 
 class StorageUtils {
     
-    private enum Constants {
+    enum Constants {
         static let firstEntranceKey = "DetourFirstEntranceFlag"
+        static let deviceIDKey = "Detour_deviceId"
     }
 
     static func isFirstEntrance() -> Bool {
