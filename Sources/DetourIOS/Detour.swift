@@ -79,7 +79,6 @@ public class Detour {
                 if let resolvedUrl = await DetourNetwork.resolveShortLink(config: config, url: rawLink),
                    resolvedUrl.absoluteString != normalized
                 {
-                    // Keep RN behavior: resolved web short-links are re-processed without preserving override.
                     return await resolveLink(resolvedUrl.absoluteString, config: config)
                 }
             }
