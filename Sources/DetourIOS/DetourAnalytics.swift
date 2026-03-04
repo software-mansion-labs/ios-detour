@@ -4,19 +4,18 @@ import Foundation
 public final class DetourAnalytics {
     public static let shared = DetourAnalytics()
 
-    private var activeMountCount = 0
-    private var mountTokens: Set<UUID> = []
+    private var isMounted = false
+    private var subscriptionToken: UUID?
     private var hasLoggedColdStartRetention = false
 
     private init() {}
 
-    @discardableResult
-    public static func mount(config: DetourConfig) -> UUID {
+    public static func mount(config: DetourConfig) {
         shared.mount(config: config)
     }
 
-    public static func unmount(_ token: UUID) {
-        shared.unmount(token)
+    public static func unmount() {
+        shared.unmount()
     }
 
     public static func logEvent(_ eventName: DetourEventName, data: [String: Any]? = nil) {
@@ -31,17 +30,12 @@ public final class DetourAnalytics {
         shared.logRetention(eventName)
     }
 
-    @discardableResult
-    public func mount(config: DetourConfig) -> UUID {
-        activeMountCount += 1
+    public func mount(config: DetourConfig) {
+        guard !isMounted else { return }
+        isMounted = true
 
         let token = AnalyticsEmitter.shared.subscribe { [weak self] payload in
             guard let self else { return }
-
-            if self.activeMountCount > 1 {
-                print("🔗[Detour:ANALYTICS_ERROR] Event \"\(payload.eventName)\" dropped. Multiple analytics mounts (\(self.activeMountCount)) detected. Analytics logging is disabled until only one mount remains.")
-                return
-            }
 
             Task {
                 let deviceID = await DeviceIDPersistence.shared.prepareDeviceID()
@@ -63,21 +57,21 @@ public final class DetourAnalytics {
             }
         }
 
-        mountTokens.insert(token)
+        subscriptionToken = token
 
         if !hasLoggedColdStartRetention {
             logRetention("app_open")
             hasLoggedColdStartRetention = true
         }
-
-        return token
     }
 
-    public func unmount(_ token: UUID) {
-        guard mountTokens.contains(token) else { return }
-        mountTokens.remove(token)
+    public func unmount() {
+        guard isMounted else { return }
+        isMounted = false
+
+        guard let token = subscriptionToken else { return }
+        subscriptionToken = nil
         AnalyticsEmitter.shared.unsubscribe(token)
-        activeMountCount = max(0, activeMountCount - 1)
     }
 
     public func logEvent(_ eventName: DetourEventName, data: [String: Any]? = nil) {

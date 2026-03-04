@@ -22,7 +22,7 @@ final class DetourDemoState: ObservableObject {
             lastLinkType = linkType.rawValue
         }
 
-        let linkValue = result.link?.absoluteString ?? "nil"
+        let linkValue = result.link?.url ?? "nil"
         appendLog("[\(source)] route=\(result.route ?? "nil"), linkType=\(result.linkType?.rawValue ?? "nil"), link=\(linkValue)")
     }
 

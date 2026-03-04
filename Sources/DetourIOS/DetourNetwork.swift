@@ -37,7 +37,7 @@ class DetourNetwork {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appId, forHTTPHeaderField: "X-App-ID")
+        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         request.httpBody = httpBody
 
         URLSession.shared.dataTask(with: request) { data, response, error in
@@ -98,9 +98,9 @@ class DetourNetwork {
                let linkString = json["link"] as? String,
                let url = URL(string: linkString)
             {
-                let route = LinkUtils.extractRoute(from: url)
+                let detourLink = LinkUtils.makeDetourLink(from: url, type: linkType)
                 DispatchQueue.main.async {
-                    completion(DetourResult(processed: true, link: url, route: route, linkType: linkType))
+                    completion(DetourResult(processed: true, link: detourLink))
                 }
             } else {
                 DispatchQueue.main.async { completion(.empty()) }
@@ -123,7 +123,7 @@ class DetourNetwork {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appId, forHTTPHeaderField: "X-App-ID")
+        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         request.httpBody = requestBody
 
         do {

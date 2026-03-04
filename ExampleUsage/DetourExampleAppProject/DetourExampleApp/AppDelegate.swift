@@ -11,8 +11,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     private let detourConfig = DetourConfig(
         apiKey: "<YOUR_DETOUR_API_KEY>",
-        appId: "<YOUR_DETOUR_APP_ID>",
-        shouldUseClipboard: false
+        appID: "<YOUR_DETOUR_APP_ID>",
+        shouldUseClipboard: false,
+        linkProcessingMode: .all
     )
 
     func application(
@@ -27,7 +28,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window = window
 
         // Mount analytics once at startup.
-        _ = Detour.shared.mountAnalytics(config: detourConfig)
+        Detour.shared.mountAnalytics(config: detourConfig)
 
         // Resolve initial deferred/universal link.
         Detour.shared.resolveInitialLink(config: detourConfig, launchOptions: launchOptions) { result in
@@ -52,9 +53,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        let result = Detour.shared.processLink(url)
-
         Task { @MainActor in
+            let result = await Detour.shared.processLink(url, config: detourConfig)
             DetourDemoState.shared.recordLinkResult(result, source: "custom_scheme")
         }
 
@@ -72,9 +72,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             return false
         }
 
-        let result = Detour.shared.processLink(url)
-
         Task { @MainActor in
+            let result = await Detour.shared.processLink(url, config: detourConfig)
             DetourDemoState.shared.recordLinkResult(result, source: "universal_link")
         }
 

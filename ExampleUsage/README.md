@@ -12,7 +12,7 @@
 ## Files
 
 - `DetourExampleApp/AppDelegate.swift`: app startup + deep-link handlers
-- `DetourExampleApp/ContentView.swift`: manual link + analytics actions
+- `DetourExampleApp/ContentView.swift`: analytics actions + runtime logs
 - `DetourExampleApp/DetourDemoState.swift`: state/logging helper
 - `DetourExampleApp/Info.plist`: custom URL scheme template
 - `DetourExampleApp/DetourExample.entitlements`: Associated Domains template

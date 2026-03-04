@@ -17,7 +17,7 @@ enum AnalyticsNetwork {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appId, forHTTPHeaderField: "X-App-ID")
+        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         return request
     }
 
