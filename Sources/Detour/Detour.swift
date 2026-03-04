@@ -18,6 +18,13 @@ public class Detour {
         DetourAnalytics.unmount()
     }
 
+    public func resetSession(allowDeferredRetry: Bool = false) {
+        isSessionHandled = false
+        if allowDeferredRetry {
+            StorageUtils.resetFirstEntrance()
+        }
+    }
+
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
         guard mode != .all else { return result }
         guard let link = result.link else { return result }
@@ -35,7 +42,8 @@ public class Detour {
     private func resolveLink(
         _ rawLink: String,
         config: DetourConfig?,
-        typeOverride: LinkType? = nil
+        typeOverride: LinkType? = nil,
+        visitedShortLinks: Set<String> = []
     ) async -> DetourLink? {
         if LinkUtils.isInfrastructureUrl(rawLink) {
             return nil
@@ -76,10 +84,18 @@ public class Detour {
             let isSingleSegmentPath = pathSegments.count == 1 && !pathSegments[0].isEmpty
 
             if isSingleSegmentPath, let config {
-                if let resolvedUrl = await DetourNetwork.resolveShortLink(config: config, url: rawLink),
-                   resolvedUrl.absoluteString != normalized
-                {
-                    return await resolveLink(resolvedUrl.absoluteString, config: config)
+                var visited = visitedShortLinks
+                visited.insert(normalized)
+
+                if let resolvedUrl = await DetourNetwork.resolveShortLink(config: config, url: rawLink) {
+                    let normalizedResolved = LinkUtils.normalizeRawLink(resolvedUrl.absoluteString)
+                    if !visited.contains(normalizedResolved) {
+                        return await resolveLink(
+                            normalizedResolved,
+                            config: config,
+                            visitedShortLinks: visited
+                        )
+                    }
                 }
             }
         }
@@ -97,6 +113,39 @@ public class Detour {
         return activityDict.values.compactMap { value in
             guard let activity = value as? NSUserActivity else { return nil }
             return activity.activityType == NSUserActivityTypeBrowsingWeb ? activity : nil
+        }
+    }
+
+    private func browsingWebActivities(from connectionOptions: UIScene.ConnectionOptions) -> [NSUserActivity] {
+        connectionOptions.userActivities.filter { $0.activityType == NSUserActivityTypeBrowsingWeb }
+    }
+
+    private func resolveDeferredInitialLink(
+        config: DetourConfig,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        if !StorageUtils.isFirstEntrance() {
+            isSessionHandled = true
+            completion(.empty())
+            return
+        }
+
+        StorageUtils.markFirstEntrance()
+        isSessionHandled = true
+
+        Task {
+            let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
+            DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred) { [weak self] result in
+                Task { @MainActor in
+                    guard let self else {
+                        completion(result)
+                        return
+                    }
+
+                    let filteredResult = self.filterNonWebUrlLikeLinks(result, mode: config.linkProcessingMode)
+                    completion(filteredResult)
+                }
+            }
         }
     }
     
@@ -133,13 +182,13 @@ public class Detour {
             func returnEmpty() { completion(.empty()) }
             
             if isSessionHandled { returnEmpty(); return }
-            isSessionHandled = true
             
             if config.linkProcessingMode != .deferredOnly {
                 if let launchURL = launchOptions?[.url] as? URL,
                    !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
                 {
                     StorageUtils.markFirstEntrance()
+                    isSessionHandled = true
                     Task {
                         let result = await processLink(launchURL.absoluteString, config: config)
                         completion(result)
@@ -152,6 +201,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
                 {
                     StorageUtils.markFirstEntrance()
+                    isSessionHandled = true
                     Task {
                         let result = await processLink(universalURL.absoluteString, config: config)
                         completion(result)
@@ -161,34 +211,62 @@ public class Detour {
 
                 if !activities.isEmpty {
                     StorageUtils.markFirstEntrance()
+                    isSessionHandled = true
                     // UIApplicationDelegate will invoke continueUserActivity next.
                     returnEmpty()
                     return
                 }
             }
-            
-            // 3. DEFERRED LINK CHECK
-            if !StorageUtils.isFirstEntrance() {
+
+            resolveDeferredInitialLink(config: config, completion: completion)
+        }
+
+    public func resolveInitialLink(
+        config: DetourConfig,
+        connectionOptions: UIScene.ConnectionOptions,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        mountAnalytics(config: config)
+
+        func returnEmpty() { completion(.empty()) }
+
+        if isSessionHandled { returnEmpty(); return }
+
+        if config.linkProcessingMode != .deferredOnly {
+            if let openURL = connectionOptions.urlContexts.first?.url,
+               !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
+            {
+                StorageUtils.markFirstEntrance()
+                isSessionHandled = true
+                Task {
+                    let result = await processLink(openURL.absoluteString, config: config)
+                    completion(result)
+                }
+                return
+            }
+
+            let activities = browsingWebActivities(from: connectionOptions)
+            if let universalURL = activities.compactMap(\.webpageURL).first,
+               !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
+            {
+                StorageUtils.markFirstEntrance()
+                isSessionHandled = true
+                Task {
+                    let result = await processLink(universalURL.absoluteString, config: config)
+                    completion(result)
+                }
+                return
+            }
+
+            if !activities.isEmpty {
+                StorageUtils.markFirstEntrance()
+                isSessionHandled = true
                 returnEmpty()
                 return
             }
-            
-            StorageUtils.markFirstEntrance()
-            
-            Task {
-                let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
-                DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred) { [weak self] result in
-                    Task { @MainActor in
-                        guard let self else {
-                            completion(result)
-                            return
-                        }
-
-                        let filteredResult = self.filterNonWebUrlLikeLinks(result, mode: config.linkProcessingMode)
-                        completion(filteredResult)
-                    }
-                }
-            }
         }
+
+        resolveDeferredInitialLink(config: config, completion: completion)
+    }
     
 }

@@ -14,4 +14,8 @@ class StorageUtils {
     static func markFirstEntrance() {
         UserDefaults.standard.set(true, forKey: Constants.firstEntranceKey)
     }
+
+    static func resetFirstEntrance() {
+        UserDefaults.standard.set(false, forKey: Constants.firstEntranceKey)
+    }
 }

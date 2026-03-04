@@ -1,10 +1,14 @@
 import Foundation
 
 enum AnalyticsNetwork {
-    private static func makeTimestamp() -> String {
+    private static let timestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    private static func makeTimestamp() -> String {
+        return timestampFormatter.string(from: Date())
     }
 
     private static func baseRequest(
@@ -30,10 +34,15 @@ enum AnalyticsNetwork {
         ]
     }
 
-    static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String) async {
-        guard var request = baseRequest(url: DetourConstants.analyticsEventUrl, config: config) else {
-            return
-        }
+    private static func send(
+        config: DetourConfig,
+        url: URL?,
+        eventName: String,
+        deviceID: String,
+        data: [String: Any]?,
+        kind: String
+    ) async {
+        guard var request = baseRequest(url: url, config: config) else { return }
 
         var body = commonBody(eventName: eventName, deviceID: deviceID)
         if let data, JSONSerialization.isValidJSONObject(data) {
@@ -41,7 +50,7 @@ enum AnalyticsNetwork {
         }
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            print("🔗[Detour:ANALYTICS_ERROR] Failed to encode event body.")
+            print("🔗[Detour:ANALYTICS_ERROR] Failed to encode \(kind) body.")
             return
         }
 
@@ -52,35 +61,32 @@ enum AnalyticsNetwork {
             guard let httpResponse = response as? HTTPURLResponse else { return }
 
             if !(200 ... 299).contains(httpResponse.statusCode) {
-                print("🔗[Detour:ANALYTICS_ERROR] Failed to log event: \(httpResponse.statusCode)")
+                print("🔗[Detour:ANALYTICS_ERROR] Failed to log \(kind): \(httpResponse.statusCode)")
             }
         } catch {
-            print("🔗[Detour:ANALYTICS_ERROR] Network error logging event: \(error.localizedDescription)")
+            print("🔗[Detour:ANALYTICS_ERROR] Network error logging \(kind): \(error.localizedDescription)")
         }
     }
 
+    static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String) async {
+        await send(
+            config: config,
+            url: DetourConstants.analyticsEventUrl,
+            eventName: eventName,
+            deviceID: deviceID,
+            data: data,
+            kind: "event"
+        )
+    }
+
     static func sendRetentionEvent(config: DetourConfig, eventName: String, deviceID: String) async {
-        guard var request = baseRequest(url: DetourConstants.analyticsRetentionUrl, config: config) else {
-            return
-        }
-
-        let body = commonBody(eventName: eventName, deviceID: deviceID)
-        guard let bodyData = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            print("🔗[Detour:ANALYTICS_ERROR] Failed to encode retention event body.")
-            return
-        }
-
-        request.httpBody = bodyData
-
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else { return }
-
-            if !(200 ... 299).contains(httpResponse.statusCode) {
-                print("🔗[Detour:ANALYTICS_ERROR] Failed to log retention event: \(httpResponse.statusCode)")
-            }
-        } catch {
-            print("🔗[Detour:ANALYTICS_ERROR] Network error logging retention event: \(error.localizedDescription)")
-        }
+        await send(
+            config: config,
+            url: DetourConstants.analyticsRetentionUrl,
+            eventName: eventName,
+            deviceID: deviceID,
+            data: nil,
+            kind: "retention event"
+        )
     }
 }
