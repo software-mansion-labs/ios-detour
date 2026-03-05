@@ -1,6 +1,9 @@
 import Foundation
 
 class DetourNetwork {
+    private struct LinkResponse: Decodable {
+        let link: String?
+    }
 
     private static func logAndFail(
         _ message: String,
@@ -94,10 +97,10 @@ class DetourNetwork {
         }
 
         do {
-            if let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-               let linkString = json["link"] as? String,
-               let url = URL(string: linkString)
-            {
+            let response = try JSONDecoder().decode(LinkResponse.self, from: responseData)
+
+            if let linkString = response.link,
+               let url = URL(string: linkString) {
                 let detourLink = LinkUtils.makeDetourLink(from: url, type: linkType)
                 DispatchQueue.main.async {
                     completion(DetourResult(processed: true, link: detourLink))
@@ -114,6 +117,8 @@ class DetourNetwork {
         guard let endpoint = DetourConstants.resolveShortUrl else {
             return nil
         }
+
+        let normalizedInput = LinkUtils.normalizeRawLink(url)
 
         guard let requestBody = try? JSONEncoder().encode(["url": url]) else {
             return nil
@@ -132,12 +137,18 @@ class DetourNetwork {
             if httpResponse.statusCode == 404 { return nil }
             guard (200 ... 299).contains(httpResponse.statusCode) else { return nil }
 
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let linkString = json["link"] as? String else {
+            let decodedResponse = try JSONDecoder().decode(LinkResponse.self, from: data)
+            guard let linkString = decodedResponse.link,
+                  let resolvedURL = URL(string: linkString) else {
                 return nil
             }
 
-            return URL(string: linkString)
+            let normalizedResolved = LinkUtils.normalizeRawLink(resolvedURL.absoluteString)
+            if normalizedResolved == normalizedInput {
+                return nil
+            }
+
+            return resolvedURL
         } catch {
             return nil
         }
