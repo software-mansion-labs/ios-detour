@@ -23,7 +23,7 @@ In Xcode:
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/software-mansion-labs/react-native-detour", from: "1.0.0")
+.package(url: "https://github.com/software-mansion-labs/ios-detour", from: "1.0.0")
 ```
 
 ## Usage
