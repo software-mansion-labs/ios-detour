@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 
 class DeviceUtils {
+    private static let tag = "FingerprintCollector"
 
     @MainActor
     private static var webView: WKWebView?
@@ -13,13 +14,13 @@ class DeviceUtils {
 
             webView?.evaluateJavaScript("navigator.userAgent") { result, error in
                 if let error = error {
-                    print("⚠️ [Detour] WebKit Error: \(error.localizedDescription)")
+                    DetourLogger.warn(tag, "[Detour:FINGERPRINT] WebKit userAgent retrieval failed: \(error.localizedDescription)")
                 }
 
                 if let ua = result as? String {
                     continuation.resume(returning: ua)
                 } else {
-                    print("⚠️ [Detour] Could not retrieve WebKit User Agent. Result was nil.")
+                    DetourLogger.warn(tag, "[Detour:FINGERPRINT] WebKit userAgent result was nil")
                     continuation.resume(returning: "")
                 }
 

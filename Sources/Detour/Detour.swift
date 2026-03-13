@@ -7,6 +7,7 @@ public class Detour {
     public static let shared = Detour()
     
     private var isSessionHandled = false
+    private let tag = "Detour"
     
     private init() {} // Private init to force use of 'shared'
 
@@ -20,8 +21,10 @@ public class Detour {
 
     public func resetSession(allowDeferredRetry: Bool = false) {
         isSessionHandled = false
+        DetourLogger.debug(tag, "Session reset")
         if allowDeferredRetry {
             StorageUtils.resetFirstEntrance()
+            DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
         }
     }
 
@@ -33,6 +36,7 @@ public class Detour {
         let isWeb = LinkUtils.isWebUrl(link.url, parsedUrl: parsed)
 
         if LinkUtils.looksLikeUrl(link.url), !isWeb {
+            DetourLogger.debug(tag, "Non-web URL-like link filtered by mode \(mode.rawValue)")
             return .empty()
         }
 
@@ -46,6 +50,7 @@ public class Detour {
         visitedShortLinks: Set<String> = []
     ) async -> DetourLink? {
         if LinkUtils.isInfrastructureUrl(rawLink) {
+            DetourLogger.debug(tag, "Ignored infrastructure URL: \(rawLink)")
             return nil
         }
 
@@ -59,9 +64,11 @@ public class Detour {
         guard let url = URL(string: normalized) else {
             let isWeb = LinkUtils.isWebUrl(rawLink)
             if !isWeb && mode != .all {
+                DetourLogger.debug(tag, "Custom scheme link ignored in mode \(mode.rawValue)")
                 return nil
             }
 
+            DetourLogger.warn(tag, "[Detour:TYPE_ERROR] Failed to parse URL, falling back to raw string")
             let fallbackType = typeOverride ?? (isWeb ? .verified : .scheme)
             return DetourLink(
                 url: rawLink,
@@ -74,6 +81,7 @@ public class Detour {
 
         let isWeb = LinkUtils.isWebUrl(rawLink, parsedUrl: url)
         if !isWeb && mode != .all {
+            DetourLogger.debug(tag, "Custom scheme link ignored in mode \(mode.rawValue)")
             return nil
         }
 
@@ -125,6 +133,7 @@ public class Detour {
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         if !StorageUtils.isFirstEntrance() {
+            DetourLogger.debug(tag, "Not first launch")
             isSessionHandled = true
             completion(.empty())
             return
@@ -132,6 +141,8 @@ public class Detour {
 
         StorageUtils.markFirstEntrance()
         isSessionHandled = true
+        DetourLogger.debug(tag, "First launch detected, processing deferred link")
+        DetourLogger.debug(tag, "Using probabilistic matching")
 
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
@@ -143,6 +154,11 @@ public class Detour {
                     }
 
                     let filteredResult = self.filterNonWebUrlLikeLinks(result, mode: config.linkProcessingMode)
+                    if filteredResult.link == nil {
+                        DetourLogger.debug(self.tag, "No deferred link matched")
+                    } else {
+                        DetourLogger.debug(self.tag, "Deferred link matched successfully")
+                    }
                     completion(filteredResult)
                 }
             }
@@ -152,10 +168,19 @@ public class Detour {
     // Converts a URL into a DetourResult with a parsed route.
     public func processLink(_ url: URL) -> DetourResult {
         if LinkUtils.isInfrastructureUrl(url.absoluteString) {
+            DetourLogger.debug(tag, "Ignored infrastructure URL: \(url.absoluteString)")
             return .empty()
         }
 
         let linkType = LinkUtils.detectLinkType(from: url)
+        switch linkType {
+        case .verified:
+            DetourLogger.debug(tag, "Processing Universal Link")
+        case .scheme:
+            DetourLogger.debug(tag, "Processing Scheme Link")
+        case .deferred:
+            DetourLogger.debug(tag, "Processing Deferred Link")
+        }
         let link = LinkUtils.makeDetourLink(from: url, type: linkType)
         return DetourResult(processed: true, link: link)
     }
@@ -169,6 +194,9 @@ public class Detour {
     // If config is provided, web short-links are resolved before parsing.
     public func processLink(_ rawLink: String, config: DetourConfig? = nil) async -> DetourResult {
         let resolvedLink = await resolveLink(rawLink, config: config)
+        if resolvedLink == nil {
+            DetourLogger.debug(tag, "No matching link found")
+        }
         return DetourResult(processed: true, link: resolvedLink)
     }
     
@@ -181,12 +209,17 @@ public class Detour {
             
             func returnEmpty() { completion(.empty()) }
             
-            if isSessionHandled { returnEmpty(); return }
+            if isSessionHandled {
+                DetourLogger.debug(tag, "Session already handled")
+                returnEmpty()
+                return
+            }
             
             if config.linkProcessingMode != .deferredOnly {
                 if let launchURL = launchOptions?[.url] as? URL,
                    !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
                 {
+                    DetourLogger.debug(tag, "Processing launch URL")
                     StorageUtils.markFirstEntrance()
                     isSessionHandled = true
                     Task {
@@ -200,6 +233,7 @@ public class Detour {
                 if let universalURL = activities.compactMap(\.webpageURL).first,
                    !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
                 {
+                    DetourLogger.debug(tag, "Processing Universal Link")
                     StorageUtils.markFirstEntrance()
                     isSessionHandled = true
                     Task {
@@ -210,6 +244,7 @@ public class Detour {
                 }
 
                 if !activities.isEmpty {
+                    DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
                     StorageUtils.markFirstEntrance()
                     isSessionHandled = true
                     // UIApplicationDelegate will invoke continueUserActivity next.
@@ -218,6 +253,7 @@ public class Detour {
                 }
             }
 
+            DetourLogger.debug(tag, "Falling back to deferred link resolution")
             resolveDeferredInitialLink(config: config, completion: completion)
         }
 
@@ -230,12 +266,17 @@ public class Detour {
 
         func returnEmpty() { completion(.empty()) }
 
-        if isSessionHandled { returnEmpty(); return }
+        if isSessionHandled {
+            DetourLogger.debug(tag, "Session already handled")
+            returnEmpty()
+            return
+        }
 
         if config.linkProcessingMode != .deferredOnly {
             if let openURL = connectionOptions.urlContexts.first?.url,
                !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
             {
+                DetourLogger.debug(tag, "Processing launch URL")
                 StorageUtils.markFirstEntrance()
                 isSessionHandled = true
                 Task {
@@ -249,6 +290,7 @@ public class Detour {
             if let universalURL = activities.compactMap(\.webpageURL).first,
                !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
             {
+                DetourLogger.debug(tag, "Processing Universal Link")
                 StorageUtils.markFirstEntrance()
                 isSessionHandled = true
                 Task {
@@ -259,6 +301,7 @@ public class Detour {
             }
 
             if !activities.isEmpty {
+                DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
                 StorageUtils.markFirstEntrance()
                 isSessionHandled = true
                 returnEmpty()
@@ -266,6 +309,7 @@ public class Detour {
             }
         }
 
+        DetourLogger.debug(tag, "Falling back to deferred link resolution")
         resolveDeferredInitialLink(config: config, completion: completion)
     }
     

@@ -11,6 +11,20 @@ Sign up here: [https://godetour.dev/auth/signup](https://godetour.dev/auth/signu
 
 ## Installation
 
+### CocoaPods
+
+In `Podfile`:
+
+```ruby
+pod 'Detour', '>= 0.1.0'
+```
+
+For local development (before publishing the pod), you can point directly to the repository checkout:
+
+```ruby
+pod 'Detour', :path => '../ios-detour'
+```
+
 ### Swift Package Manager
 
 In Xcode:

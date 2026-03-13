@@ -4,6 +4,8 @@ typealias AnalyticsListener = (AnalyticsEventPayload) -> Void
 
 @MainActor
 final class AnalyticsEmitter {
+    private static let tag = "DetourAnalytics"
+
     static let shared = AnalyticsEmitter()
 
     private var listeners: [UUID: AnalyticsListener] = [:]
@@ -24,7 +26,7 @@ final class AnalyticsEmitter {
         let snapshot = Array(listeners.values)
 
         if snapshot.isEmpty {
-            print("🔗[Detour:ANALYTICS_WARNING] DetourAnalytics method called but analytics is not mounted. Event dropped.")
+            DetourLogger.warn(Self.tag, "[Detour:ANALYTICS] Analytics not initialized - call mount(config:) first")
             return
         }
 
