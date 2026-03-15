@@ -9,6 +9,14 @@ SDK for handling deferred links and deep links in native iOS apps.
 You need a Detour account to generate app credentials and configure links.
 Sign up here: [https://godetour.dev/auth/signup](https://godetour.dev/auth/signup)
 
+## Other Detour SDKs
+
+Detour is also available for other app stacks:
+
+- Android SDK: [https://github.com/software-mansion-labs/android-detour](https://github.com/software-mansion-labs/android-detour)
+- Flutter SDK: [https://github.com/software-mansion-labs/detour-flutter-plugin](https://github.com/software-mansion-labs/detour-flutter-plugin)
+- React Native SDK: [https://github.com/software-mansion-labs/react-native-detour](https://github.com/software-mansion-labs/react-native-detour)
+
 ## Installation
 
 ### CocoaPods
@@ -17,12 +25,6 @@ In `Podfile`:
 
 ```ruby
 pod 'Detour', '>= 0.1.0'
-```
-
-For local development (before publishing the pod), you can point directly to the repository checkout:
-
-```ruby
-pod 'Detour', :path => '../ios-detour'
 ```
 
 ### Swift Package Manager
