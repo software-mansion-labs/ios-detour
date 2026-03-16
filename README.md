@@ -19,15 +19,7 @@ Detour is also available for other app stacks:
 
 ## Installation
 
-### CocoaPods
-
-In `Podfile`:
-
-```ruby
-pod 'Detour', '>= 0.1.0'
-```
-
-### Swift Package Manager
+### Swift Package Manager (SPM)
 
 In Xcode:
 
@@ -39,7 +31,7 @@ In Xcode:
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/software-mansion-labs/ios-detour", from: "1.0.0")
+.package(url: "https://github.com/software-mansion-labs/ios-detour", from: "0.1.0")
 ```
 
 ## Usage
