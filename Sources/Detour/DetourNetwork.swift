@@ -1,6 +1,8 @@
 import Foundation
 
 class DetourNetwork {
+    private static let tag = "DetourApiClient"
+
     private struct LinkResponse: Decodable {
         let link: String?
     }
@@ -9,7 +11,7 @@ class DetourNetwork {
         _ message: String,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
-        print("🔗[Detour:NETWORK_ERROR] \(message)")
+        DetourLogger.error(tag, "[Detour:NETWORK_ERROR] \(message)")
 
         DispatchQueue.main.async {
             completion(.empty())
@@ -42,6 +44,8 @@ class DetourNetwork {
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         request.httpBody = httpBody
+
+        DetourLogger.debug(tag, "Sending fingerprint to API")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             handleResponse(
@@ -101,11 +105,13 @@ class DetourNetwork {
 
             if let linkString = response.link,
                let url = URL(string: linkString) {
+                DetourLogger.debug(tag, "Link matched successfully")
                 let detourLink = LinkUtils.makeDetourLink(from: url, type: linkType)
                 DispatchQueue.main.async {
                     completion(DetourResult(processed: true, link: detourLink))
                 }
             } else {
+                DetourLogger.debug(tag, "No matching link found")
                 DispatchQueue.main.async { completion(.empty()) }
             }
         } catch {
@@ -115,6 +121,7 @@ class DetourNetwork {
 
     static func resolveShortLink(config: DetourConfig, url: String) async -> URL? {
         guard let endpoint = DetourConstants.resolveShortUrl else {
+            DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Short link resolution failed: invalid endpoint")
             return nil
         }
 
@@ -135,7 +142,10 @@ class DetourNetwork {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else { return nil }
             if httpResponse.statusCode == 404 { return nil }
-            guard (200 ... 299).contains(httpResponse.statusCode) else { return nil }
+            guard (200 ... 299).contains(httpResponse.statusCode) else {
+                DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Short link resolution failed: \(httpResponse.statusCode)")
+                return nil
+            }
 
             let decodedResponse = try JSONDecoder().decode(LinkResponse.self, from: data)
             guard let linkString = decodedResponse.link,
@@ -148,8 +158,10 @@ class DetourNetwork {
                 return nil
             }
 
+            DetourLogger.debug(tag, "Short link resolved successfully")
             return resolvedURL
         } catch {
+            DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Short link resolution exception: \(error.localizedDescription)")
             return nil
         }
     }

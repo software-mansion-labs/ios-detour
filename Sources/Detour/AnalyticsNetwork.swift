@@ -1,6 +1,8 @@
 import Foundation
 
 enum AnalyticsNetwork {
+    private static let tag = "AnalyticsApiClient"
+
     private static let timestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -50,7 +52,7 @@ enum AnalyticsNetwork {
         }
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            print("🔗[Detour:ANALYTICS_ERROR] Failed to encode \(kind) body.")
+            DetourLogger.warn(tag, "[Detour:ANALYTICS] Failed to encode \(kind) body.")
             return
         }
 
@@ -61,10 +63,10 @@ enum AnalyticsNetwork {
             guard let httpResponse = response as? HTTPURLResponse else { return }
 
             if !(200 ... 299).contains(httpResponse.statusCode) {
-                print("🔗[Detour:ANALYTICS_ERROR] Failed to log \(kind): \(httpResponse.statusCode)")
+                DetourLogger.warn(tag, "[Detour:ANALYTICS] \(kind) send failed: \(httpResponse.statusCode)")
             }
         } catch {
-            print("🔗[Detour:ANALYTICS_ERROR] Network error logging \(kind): \(error.localizedDescription)")
+            DetourLogger.warn(tag, "[Detour:ANALYTICS] \(kind) send exception: \(error.localizedDescription)")
         }
     }
 
