@@ -1,6 +1,6 @@
 <img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="IOS Detour by Software Mansion" width="100%"/>
 
-# Detour
+# Detour iOS SDK
 
 SDK for handling deferred links and deep links in native iOS apps.
 
