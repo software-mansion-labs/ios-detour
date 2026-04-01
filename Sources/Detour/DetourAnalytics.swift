@@ -35,10 +35,10 @@ public final class DetourAnalytics {
         isMounted = true
 
         let token = AnalyticsEmitter.shared.subscribe { [weak self] payload in
-            guard let self else { return }
+            guard self != nil else { return }
 
             Task {
-                let deviceID = await DeviceIDPersistence.shared.prepareDeviceID()
+                let deviceID = DeviceIDPersistence.shared.prepareDeviceID()
 
                 if payload.isRetention {
                     await AnalyticsNetwork.sendRetentionEvent(
