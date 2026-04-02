@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'Detour'
-  s.version          = '1.0.1'
+  s.version          = File.read(File.join(__dir__, 'Sources/Detour/Resources/detour_sdk_version.txt')).strip
   s.summary          = 'SDK for handling deferred links and deep links in native iOS apps.'
 
   s.description      = <<-DESC
@@ -21,4 +21,5 @@ Pod::Spec.new do |s|
   s.swift_version         = '5.5'
 
   s.source_files = 'Sources/Detour/**/*.swift'
+  s.resources = 'Sources/Detour/Resources/*'
 end

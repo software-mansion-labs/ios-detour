@@ -63,7 +63,6 @@ class DeviceUtils {
         let userAgent = await getRealUserAgent()
 
         return ProbabilisticFingerprint(
-            sdk: DetourConstants.sdk,
             platform: "ios",
             model: device.model,
             manufacturer: "Apple",

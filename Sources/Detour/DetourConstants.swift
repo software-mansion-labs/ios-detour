@@ -1,7 +1,10 @@
 import Foundation
 
 enum DetourConstants {
-    static let sdk = "ios"
+    static let sdkType = "ios"
+    static let sdkVersion = DetourSDKVersion.current
+    static let sdkHeaderField = "X-Detour-SDK"
+    static let sdkHeaderValue = "\(sdkType)/\(sdkVersion)"
     static let apiUrl: URL? = URL(string: "https://godetour.dev/api/link/match-link")
     static let resolveShortUrl: URL? = URL(string: "https://godetour.dev/api/link/resolve-short")
     static let analyticsEventUrl: URL? = URL(string: "https://godetour.dev/api/analytics/event")
