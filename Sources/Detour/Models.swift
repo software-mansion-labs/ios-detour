@@ -54,6 +54,7 @@ public struct DetourLink: Sendable {
 }
 
 struct ProbabilisticFingerprint: Codable {
+    let sdk: String
     let platform: String
     let model: String
     let manufacturer: String
@@ -70,6 +71,11 @@ struct ProbabilisticFingerprint: Codable {
 
 struct LocaleTag: Codable {
     let languageTag: String
+}
+
+struct ShortLinkResolveRequest: Codable {
+    let url: String
+    let sdk: String
 }
 
 public struct DetourResult: Sendable {

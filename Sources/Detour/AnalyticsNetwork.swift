@@ -31,6 +31,7 @@ enum AnalyticsNetwork {
         return [
             "event_name": eventName,
             "timestamp": makeTimestamp(),
+            "sdk": DetourConstants.sdk,
             "platform": "ios",
             "device_id": deviceID,
         ]
