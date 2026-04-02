@@ -73,11 +73,6 @@ struct LocaleTag: Codable {
     let languageTag: String
 }
 
-struct ShortLinkResolveRequest: Codable {
-    let url: String
-    let sdk: String
-}
-
 public struct DetourResult: Sendable {
     public let processed: Bool
     public let link: DetourLink?

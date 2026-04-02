@@ -127,9 +127,7 @@ class DetourNetwork {
 
         let normalizedInput = LinkUtils.normalizeRawLink(url)
 
-        let body = ShortLinkResolveRequest(url: url, sdk: DetourConstants.sdk)
-
-        guard let requestBody = try? JSONEncoder().encode(body) else {
+        guard let requestBody = try? JSONEncoder().encode(["url": url]) else {
             return nil
         }
 
