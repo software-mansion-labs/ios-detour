@@ -7,6 +7,13 @@ class DetourNetwork {
         let link: String?
     }
 
+    private static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
+        request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
+    }
+
     private static func logAndFail(
         _ message: String,
         completion: @escaping @Sendable (DetourResult) -> Void
@@ -40,9 +47,7 @@ class DetourNetwork {
 
         var request = URLRequest(url: apiUrl)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
+        applyHeaders(to: &request, config: config)
         request.httpBody = httpBody
 
         DetourLogger.debug(tag, "Sending fingerprint to API")
@@ -133,9 +138,7 @@ class DetourNetwork {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
+        applyHeaders(to: &request, config: config)
         request.httpBody = requestBody
 
         do {
