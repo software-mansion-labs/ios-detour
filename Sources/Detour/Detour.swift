@@ -6,6 +6,7 @@ import UIKit
 public class Detour {
     public static let shared = Detour()
     
+    private static let openedViaUniversalLinkEventName = "opened_via_universal_link"
     private var isSessionHandled = false
     private let tag = "Detour"
     
@@ -26,6 +27,10 @@ public class Detour {
             StorageUtils.resetFirstEntrance()
             DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
         }
+    }
+
+    private func logOpenedViaUniversalLink(_ url: URL) {
+        DetourAnalytics.logEvent(Self.openedViaUniversalLinkEventName, data: ["url": url.absoluteString])
     }
 
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
@@ -187,7 +192,11 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        await processLink(url.absoluteString, config: config)
+        if LinkUtils.detectLinkType(from: url) == .verified {
+            logOpenedViaUniversalLink(url)
+        }
+
+        return await processLink(url.absoluteString, config: config)
     }
 
     // Converts a raw link string into a DetourResult with route and link type.
@@ -237,7 +246,7 @@ public class Detour {
                     StorageUtils.markFirstEntrance()
                     isSessionHandled = true
                     Task {
-                        let result = await processLink(universalURL.absoluteString, config: config)
+                        let result = await processLink(universalURL, config: config)
                         completion(result)
                     }
                     return
@@ -294,7 +303,7 @@ public class Detour {
                 StorageUtils.markFirstEntrance()
                 isSessionHandled = true
                 Task {
-                    let result = await processLink(universalURL.absoluteString, config: config)
+                    let result = await processLink(universalURL, config: config)
                     completion(result)
                 }
                 return
