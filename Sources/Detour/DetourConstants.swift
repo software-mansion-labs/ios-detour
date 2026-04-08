@@ -1,3 +1,9 @@
+// CONTRACT: The Flutter plugin (detour-flutter-plugin) ships a marker class
+// at exactly "DetourFlutterMarker" with a static property exposed to ObjC as
+// "sdkHeaderValue". If either name changes, this lookup silently fails and
+// Flutter apps will be reported as native iOS.
+// Counterpart: detour-flutter-plugin/ios/Classes/DetourFlutterMarker.swift
+
 import Foundation
 
 enum DetourConstants {
