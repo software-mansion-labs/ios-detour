@@ -24,6 +24,7 @@ enum AnalyticsNetwork {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
+        request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
         return request
     }
 
