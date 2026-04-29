@@ -29,4 +29,5 @@ enum DetourConstants {
     static let resolveShortUrl: URL? = URL(string: "https://godetour.dev/api/link/resolve-short")
     static let analyticsEventUrl: URL? = URL(string: "https://godetour.dev/api/analytics/event")
     static let analyticsRetentionUrl: URL? = URL(string: "https://godetour.dev/api/analytics/retention")
+    static let universalLinkClickUrl: URL? = URL(string: "https://godetour.dev/api/link/universal-link-click")
 }

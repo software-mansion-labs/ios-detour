@@ -29,9 +29,9 @@ public class Detour {
         }
     }
 
-    private func logOpenedViaUniversalLink(_ url: URL) {
-        DetourAnalytics.logEvent(Self.openedViaUniversalLinkEventName, data: ["url": url.absoluteString])
-    }
+//    private func logOpenedViaUniversalLink(_ url: URL) {
+//        DetourAnalytics.logEvent(Self.openedViaUniversalLinkEventName, data: ["url": url.absoluteString])
+//    }
 
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
         guard mode != .all else { return result }
@@ -192,10 +192,12 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified {
-            logOpenedViaUniversalLink(url)
+        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+            let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
+            if !clickResult.allowed {
+                return .empty()
+            }
         }
-
         return await processLink(url.absoluteString, config: config)
     }
 

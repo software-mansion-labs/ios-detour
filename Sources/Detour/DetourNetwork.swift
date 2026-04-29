@@ -168,4 +168,53 @@ class DetourNetwork {
             return nil
         }
     }
+    
+    static func sendUniversalLinkClick(config: DetourConfig, url: String) async -> (allowed: Bool, clickId: String?) {
+        guard let endpoint = DetourConstants.universalLinkClickUrl else {
+            return (allowed: true, clickId: nil)  // fail-open
+        }
+
+        struct RequestBody: Encodable {
+            let url: String
+            let timestamp: Int64
+        }
+        struct ResponseBody: Decodable {
+            let allowed: Bool?
+            let clickId: String?
+            let error: String?
+            let code: String?
+            let clicksInPeriod: Int?
+            let effectiveLimit: Int?
+        }
+
+        guard let body = try? JSONEncoder().encode(RequestBody(url: url, timestamp: Int64(Date().timeIntervalSince1970 * 1000))) else {
+            return (allowed: true, clickId: nil)
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        applyHeaders(to: &request, config: config)
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return (allowed: true, clickId: nil) }
+
+            let decoded = try? JSONDecoder().decode(ResponseBody.self, from: data)
+            let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
+
+            if isExplicitDeny {
+                DetourLogger.error(tag, "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: \(decoded?.error ?? "limit exceeded")")
+                return (allowed: false, clickId: nil)
+            }
+
+            if !(200...299).contains(http.statusCode) {
+                return (allowed: true, clickId: nil)  // fail-open dla błędów backendu
+            }
+
+            return (allowed: true, clickId: decoded?.clickId ?? nil)
+        } catch {
+            return (allowed: true, clickId: nil)  // fail-open dla błędów sieci
+        }
+    }
 }
