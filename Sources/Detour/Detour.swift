@@ -5,8 +5,7 @@ import UIKit
 @MainActor
 public class Detour {
     public static let shared = Detour()
-    
-    private static let openedViaUniversalLinkEventName = "opened_via_universal_link"
+
     private var isSessionHandled = false
     private let tag = "Detour"
     
@@ -28,10 +27,6 @@ public class Detour {
             DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
         }
     }
-
-//    private func logOpenedViaUniversalLink(_ url: URL) {
-//        DetourAnalytics.logEvent(Self.openedViaUniversalLinkEventName, data: ["url": url.absoluteString])
-//    }
 
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
         guard mode != .all else { return result }

@@ -168,7 +168,7 @@ class DetourNetwork {
             return nil
         }
     }
-    
+
     static func sendUniversalLinkClick(config: DetourConfig, url: String) async -> (allowed: Bool, clickId: String?) {
         guard let endpoint = DetourConstants.universalLinkClickUrl else {
             return (allowed: true, clickId: nil)  // fail-open
@@ -193,6 +193,7 @@ class DetourNetwork {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 5
         applyHeaders(to: &request, config: config)
         request.httpBody = body
 
@@ -204,17 +205,20 @@ class DetourNetwork {
             let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
 
             if isExplicitDeny {
-                DetourLogger.error(tag, "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: \(decoded?.error ?? "limit exceeded")")
+                DetourLogger.error(
+                    tag,
+                    "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
+                )
                 return (allowed: false, clickId: nil)
             }
 
             if !(200...299).contains(http.statusCode) {
-                return (allowed: true, clickId: nil)  // fail-open dla błędów backendu
+                return (allowed: true, clickId: nil)  // fail-open on backend errors
             }
 
-            return (allowed: true, clickId: decoded?.clickId ?? nil)
+            return (allowed: true, clickId: decoded?.clickId)
         } catch {
-            return (allowed: true, clickId: nil)  // fail-open dla błędów sieci
+            return (allowed: true, clickId: nil)  // fail-open on network errors
         }
     }
 }
