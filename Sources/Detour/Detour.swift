@@ -5,8 +5,7 @@ import UIKit
 @MainActor
 public class Detour {
     public static let shared = Detour()
-    
-    private static let openedViaUniversalLinkEventName = "opened_via_universal_link"
+
     private var isSessionHandled = false
     private let tag = "Detour"
     
@@ -27,10 +26,6 @@ public class Detour {
             StorageUtils.resetFirstEntrance()
             DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
         }
-    }
-
-    private func logOpenedViaUniversalLink(_ url: URL) {
-        DetourAnalytics.logEvent(Self.openedViaUniversalLinkEventName, data: ["url": url.absoluteString])
     }
 
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
@@ -192,10 +187,12 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified {
-            logOpenedViaUniversalLink(url)
+        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+            let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
+            if !clickResult.allowed {
+                return .empty()
+            }
         }
-
         return await processLink(url.absoluteString, config: config)
     }
 

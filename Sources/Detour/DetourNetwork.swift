@@ -168,4 +168,113 @@ class DetourNetwork {
             return nil
         }
     }
+
+    private static func deviceModel() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        return withUnsafePointer(to: &systemInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(validatingUTF8: $0) ?? "unknown"
+            }
+        }
+    }
+
+    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
+        guard let endpoint = DetourConstants.universalLinkClickUrl else {
+            return (allowed: true, clickId: nil)  // fail-open
+        }
+
+        struct Metadata: Encodable {
+            let os_version: String
+            let app_version: String
+            let device_model: String
+        }
+
+        struct RequestBody: Encodable {
+            let link_id: String?
+            let url: String
+            let timestamp: Int64
+            let platform: String
+            let params: [String: String]?
+            let metadata: Metadata
+
+            enum CodingKeys: String, CodingKey {
+                case link_id, url, timestamp, platform, params, metadata
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                if let id = link_id { try container.encode(id, forKey: .link_id) }
+                try container.encode(url, forKey: .url)
+                try container.encode(timestamp, forKey: .timestamp)
+                try container.encode(platform, forKey: .platform)
+                if let params = params, !params.isEmpty { try container.encode(params, forKey: .params) }
+                try container.encode(metadata, forKey: .metadata)
+            }
+        }
+
+        struct ResponseBody: Decodable {
+            let allowed: Bool?
+            let clickId: String?
+            let error: String?
+            let code: String?
+            let clicksInPeriod: Int?
+            let effectiveLimit: Int?
+            let remainingClicks: Int?
+        }
+
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let osVersionString = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let urlParams = URLComponents(string: url)?.queryItems?.reduce(into: [String: String]()) {
+            $0[$1.name] = $1.value ?? ""
+        }
+
+        let requestBody = RequestBody(
+            link_id: linkId,
+            url: url,
+            timestamp: Int64(Date().timeIntervalSince1970 * 1000),
+            platform: "ios",
+            params: urlParams,
+            metadata: Metadata(
+                os_version: osVersionString,
+                app_version: appVersion,
+                device_model: deviceModel()
+            )
+        )
+
+        guard let body = try? JSONEncoder().encode(requestBody) else {
+            return (allowed: true, clickId: nil)
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        applyHeaders(to: &request, config: config)
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return (allowed: true, clickId: nil) }
+
+            let decoded = try? JSONDecoder().decode(ResponseBody.self, from: data)
+            let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
+
+            if isExplicitDeny {
+                DetourLogger.error(
+                    tag,
+                    "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
+                )
+                return (allowed: false, clickId: nil)
+            }
+
+            if !(200...299).contains(http.statusCode) {
+                return (allowed: true, clickId: nil)  // fail-open on backend errors
+            }
+
+            return (allowed: true, clickId: decoded?.clickId)
+        } catch {
+            return (allowed: true, clickId: nil)  // fail-open on network errors
+        }
+    }
 }
