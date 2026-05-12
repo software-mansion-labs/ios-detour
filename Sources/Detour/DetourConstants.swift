@@ -12,7 +12,7 @@ enum DetourConstants {
     static let flutterSdkHeaderSelector = NSSelectorFromString("sdkHeaderValue")
     // Keep the native SDK version explicit because static linking can place Detour types
     // in the host app bundle, making bundle-based version lookup return the app version.
-    static let sdkVersion = "1.0.2"
+    static let sdkVersion = "1.1.0"
     static let sdkHeaderField = "X-SDK"
     static let sdkHeaderValue: String = {
         if let markerClass = NSClassFromString(flutterMarkerClassName) as? NSObject.Type,

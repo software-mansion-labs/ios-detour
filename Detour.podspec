@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'Detour'
-  s.version          = '1.0.2'
+  s.version          = '1.1.0'
   s.summary          = 'SDK for handling deferred links and deep links in native iOS apps.'
 
   s.description      = <<-DESC
