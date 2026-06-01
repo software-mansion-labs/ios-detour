@@ -1,4 +1,4 @@
-<img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="IOS Detour by Software Mansion" width="100%"/>
+<img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="Detour iOS SDK by Software Mansion" width="100%"/>
 
 [![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-react-native-detour-1?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-react-native-detour-1&n=1)
 [![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-react-native-detour-2?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-react-native-detour-2&n=1)
@@ -6,33 +6,30 @@
 
 # Detour iOS SDK
 
-SDK for handling deferred links and deep links in native iOS apps.
+Detour is an iOS SDK for handling deferred deep links. A deferred link works like a regular deep link, but survives the App Store install — a user who clicks a link before having the app installed is redirected to the right screen on first launch. Detour also handles Universal Links and custom scheme links in a single unified API.
+
+## Quick links
+
+- Documentation: [https://detour.swmansion.com/docs/](https://detour.swmansion.com/docs/)
+- Installation guide: [https://detour.swmansion.com/docs/sdk/ios/sdk-installation](https://detour.swmansion.com/docs/sdk/ios/sdk-installation)
 
 ## Create an account
 
-You need a Detour account to generate app credentials and configure links.
+You need a Detour account to generate app credentials and configure your links.  
 Sign up here: [https://godetour.dev/auth/signup](https://godetour.dev/auth/signup)
-
-## Other Detour SDKs
-
-Detour is also available for other app stacks:
-
-- Android SDK: [https://github.com/software-mansion-labs/android-detour](https://github.com/software-mansion-labs/android-detour)
-- Flutter SDK: [https://github.com/software-mansion-labs/detour-flutter-plugin](https://github.com/software-mansion-labs/detour-flutter-plugin)
-- React Native SDK: [https://github.com/software-mansion-labs/react-native-detour](https://github.com/software-mansion-labs/react-native-detour)
 
 ## Installation
 
 Latest stable release: `1.1.0`
 
-### Swift Package Manager (SPM)
+### Requirements
 
-In Xcode:
+- iOS 13.0+
+- Swift 5.5+
 
-1. Open your project.
-2. Go to `File > Add Package Dependencies...`
-3. Enter your `Detour` repository URL.
-4. Add `Detour` to your app target.
+### Swift Package Manager
+
+In Xcode, go to `File > Add Package Dependencies...`, enter the repository URL, and add `Detour` to your app target.
 
 Or in `Package.swift`:
 
@@ -53,47 +50,79 @@ target 'YourAppTarget' do
 end
 ```
 
-Then run:
-
-```bash
-pod install
-```
+Then run `pod install`.
 
 ## Usage
 
-### 1. Import and configure
+### 1. Configure
 
 ```swift
 import Detour
 
 let config = DetourConfig(
     apiKey: "<YOUR_DETOUR_API_KEY>",
-    appID: "<YOUR_DETOUR_APP_ID>",
-    shouldUseClipboard: true,
-    linkProcessingMode: .all
+    appID: "<YOUR_DETOUR_APP_ID>"
 )
 ```
 
 ### 2. Resolve initial link on app launch
 
+Call `resolveInitialLink` once on cold start. It also mounts analytics automatically, so no separate `mountAnalytics` call is needed.
+
+AppDelegate:
+
+<details>
+<summary>AppDelegate example</summary>
+
 ```swift
-Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
-    if let link = result.link {
-        print("Route: \(link.route)")
-        print("Type: \(link.type.rawValue)")
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+        if let link = result.link {
+            // Navigate to link.route
+        }
+    }
+    return true
+}
+```
+
+</details>
+
+SceneDelegate:
+
+<details>
+<summary>SceneDelegate example</summary>
+
+```swift
+func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+) {
+    Detour.shared.resolveInitialLink(config: config, connectionOptions: connectionOptions) { result in
+        if let link = result.link {
+            // Navigate to link.route
+        }
     }
 }
 ```
 
+</details>
+
 ### 3. Handle runtime links
 
-Custom scheme:
+Handle custom scheme and Universal Links that arrive while the app is running:
+
+<details>
+<summary>Custom scheme</summary>
 
 ```swift
 func application(
     _ app: UIApplication,
     open url: URL,
-    options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
 ) -> Bool {
     Task {
         let result = await Detour.shared.processLink(url, config: config)
@@ -103,7 +132,10 @@ func application(
 }
 ```
 
-Universal link:
+</details>
+
+<details>
+<summary>Universal Link</summary>
 
 ```swift
 func application(
@@ -112,10 +144,7 @@ func application(
     restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
 ) -> Bool {
     guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-          let url = userActivity.webpageURL else {
-        return false
-    }
-
+          let url = userActivity.webpageURL else { return false }
     Task {
         let result = await Detour.shared.processLink(url, config: config)
         // handle result.link
@@ -124,62 +153,85 @@ func application(
 }
 ```
 
-## Link Processing Mode
+</details>
 
-Use `linkProcessingMode` to control which links SDK handles:
+### Controlling which links Detour processes
 
-| Value            | Universal links | Deferred links | Custom scheme links |
-| ---------------- | --------------- | -------------- | ------------------- |
-| `.all` (default) | Yes             | Yes            | Yes                 |
-| `.webOnly`       | Yes             | Yes            | No                  |
-| `.deferredOnly`  | No              | Yes            | No                  |
+Use `linkProcessingMode` to control which link sources the SDK handles:
+
+| Value               | Universal links | Deferred links | Custom scheme links |
+| ------------------- | --------------- | -------------- | ------------------- |
+| `.all` (default)    | ✅              | ✅             | ✅                  |
+| `.webOnly`          | ✅              | ✅             | ❌                  |
+| `.deferredOnly`     | ❌              | ✅             | ❌                  |
+
+<details>
+<summary>linkProcessingMode config example</summary>
+
+```swift
+let config = DetourConfig(
+    apiKey: "<YOUR_DETOUR_API_KEY>",
+    appID: "<YOUR_DETOUR_APP_ID>",
+    linkProcessingMode: .webOnly
+)
+```
+
+</details>
 
 ## Analytics
 
-Mount once (for example on app startup):
+Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:
 
-```swift
-Detour.shared.mountAnalytics(config: config)
-```
-
-Log events:
+<details>
+<summary>Analytics example</summary>
 
 ```swift
 DetourAnalytics.logEvent(.addToCart, data: ["sku": "abc"])
 DetourAnalytics.logEvent("custom_event", data: ["source": "home"])
-DetourAnalytics.logRetention("app_open")
+DetourAnalytics.logRetention("week_1")
 ```
+
+</details>
+
+If you need analytics without calling `resolveInitialLink`, mount and unmount manually:
+
+```swift
+Detour.shared.mountAnalytics(config: config)
+// ...
+Detour.shared.unmountAnalytics()
+```
+
+See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
 
 ### DetourConfig
 
+<details>
+<summary>DetourConfig</summary>
+
 ```swift
 public struct DetourConfig {
     public let apiKey: String
     public let appID: String
-    public let shouldUseClipboard: Bool
-    public let linkProcessingMode: LinkProcessingMode
+    public let shouldUseClipboard: Bool       // default: true
+    public let linkProcessingMode: LinkProcessingMode  // default: .all
 }
 ```
 
-### LinkProcessingMode
-
-```swift
-public enum LinkProcessingMode: String {
-    case all
-    case webOnly
-    case deferredOnly
-}
-```
+</details>
 
 ### DetourResult
+
+<details>
+<summary>DetourResult</summary>
 
 ```swift
 public struct DetourResult {
     public let processed: Bool
     public let link: DetourLink?
 
+    // Convenience accessors
     public var route: String?
     public var linkType: LinkType?
     public var pathname: String?
@@ -188,7 +240,12 @@ public struct DetourResult {
 }
 ```
 
+</details>
+
 ### DetourLink
+
+<details>
+<summary>DetourLink</summary>
 
 ```swift
 public struct DetourLink {
@@ -200,25 +257,49 @@ public struct DetourLink {
 }
 ```
 
+</details>
+
 ### LinkType
+
+<details>
+<summary>LinkType</summary>
 
 ```swift
 public enum LinkType: String {
-    case deferred
-    case verified
-    case scheme
+    case deferred   // User clicked link before app was installed
+    case verified   // Universal Link — http/https with verified domain ownership
+    case scheme     // Custom scheme deep link (e.g. myapp://...)
 }
 ```
 
-## Example Project
+</details>
 
-A ready-to-run example is included at:
+### LinkProcessingMode
 
-- `ExampleUsage/DetourExampleAppProject`
+<details>
+<summary>LinkProcessingMode</summary>
 
-Setup guide:
+```swift
+public enum LinkProcessingMode: String {
+    case all
+    case webOnly
+    case deferredOnly
+}
+```
 
-- `ExampleUsage/README.md`
+</details>
+
+## Example project
+
+A ready-to-run example covering deferred links, Universal Links, and custom scheme links is included at [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject). See the [example setup guide](./ExampleUsage/README.md) for instructions.
+
+## Other Detour SDKs
+
+Detour is also available for other app stacks:
+
+- Android SDK: [https://github.com/software-mansion-labs/android-detour](https://github.com/software-mansion-labs/android-detour)
+- Flutter SDK: [https://github.com/software-mansion-labs/detour-flutter-plugin](https://github.com/software-mansion-labs/detour-flutter-plugin)
+- React Native SDK: [https://github.com/software-mansion-labs/react-native-detour](https://github.com/software-mansion-labs/react-native-detour)
 
 ---
 
@@ -226,8 +307,8 @@ Setup guide:
 
 This library is licensed under [The MIT License](./LICENSE).
 
-## Detour is created by Software Mansion
+## Detour iOS SDK is created by Software Mansion
 
 Since 2012, [Software Mansion](https://swmansion.com) is a software agency with experience in building web and mobile apps. We are Core React Native Contributors and experts in dealing with all kinds of React Native issues. We can help you build your next dream product – [Hire us](https://swmansion.com/contact/projects?utm_source=detour&utm_medium=readme).
 
-[![swm](https://logo.swmansion.com/logo?color=white&variant=desktop&width=150&tag=react-native-executorch-github "Software Mansion")](https://swmansion.com)
+[![swm](https://logo.swmansion.com/logo?color=white&variant=desktop&width=150&tag=ios-detour-github "Software Mansion")](https://swmansion.com)
