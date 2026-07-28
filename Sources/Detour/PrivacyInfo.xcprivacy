@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!--
-  NSPrivacyTracking is false because deferred link matching only routes the user:
-  /api/link/match-link returns a link and nothing downstream feeds advertising or
-  ad measurement. If that changes — ad network integration, install attribution,
-  campaign reporting — this manifest is no longer accurate and must be updated:
-  set NSPrivacyTracking to true, list godetour.dev under NSPrivacyTrackingDomains,
-  revisit the purposes below, and document in the README that integrators must
-  request App Tracking Transparency authorization before calling resolveInitialLink
-  (without it the system blocks requests to tracking domains and deferred matching
-  fails silently).
--->
+
 <dict>
 	<key>NSPrivacyTracking</key>
 	<false/>
