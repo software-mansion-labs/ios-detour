@@ -52,6 +52,8 @@ end
 
 Then run `pod install`.
 
+Either integration path bundles Detour's [privacy manifest](#privacy) automatically — there is nothing to add to your app's own `PrivacyInfo.xcprivacy`.
+
 ## Usage
 
 ### 1. Configure
@@ -202,6 +204,47 @@ Detour.shared.unmountAnalytics()
 ```
 
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
+
+## Privacy
+
+Detour ships a `PrivacyInfo.xcprivacy` privacy manifest inside the SDK. Xcode bundles it automatically for both Swift Package Manager and CocoaPods, and Apple aggregates it into your app's Privacy Report at upload time — you do not need to declare Detour's API usage or data collection in your own app-level manifest.
+
+Detour does not track users: the manifest declares `NSPrivacyTracking = false` with no tracking domains. Nothing Detour collects is linked to a user's identity, combined with third-party data for advertising, or shared with data brokers.
+
+### What the manifest declares
+
+**Required reason APIs**
+
+| API category | Reason | Why |
+| --- | --- | --- |
+| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | Detour reads and writes only its own app-scoped keys — a first-launch flag for deferred link matching, and a locally generated analytics device ID. |
+
+**Collected data** — all entries are declared as not linked to the user and not used for tracking.
+
+| Data type | Purpose | What it covers |
+| --- | --- | --- |
+| `NSPrivacyCollectedDataTypeDeviceID` | App Functionality, Analytics | A random UUID generated on device and stored in `UserDefaults`, sent with analytics events so repeat events can be deduplicated and retention measured. It is not the IDFA or IDFV, and is discarded when the app is uninstalled. Also covers the device model and OS version sent with universal link clicks. |
+| `NSPrivacyCollectedDataTypeProductInteraction` | Analytics, App Functionality | Event names sent by `DetourAnalytics.logEvent` / `logRetention`, plus link clicks. |
+| `NSPrivacyCollectedDataTypeOtherUserContent` | App Functionality | The clipboard string, read once on first launch and only when it looks like a web URL, to match a deferred link. Not collected when you set `shouldUseClipboard: false`. |
+| `NSPrivacyCollectedDataTypeOtherDataTypes` | App Functionality | The probabilistic fingerprint used for deferred link matching on first launch: device model, OS version, screen dimensions and scale, preferred locales, timezone, and browser user agent. Apple has no dedicated category for these device attributes. |
+
+The fingerprint is sent once, on first launch only. The matching endpoint returns a single link, which the SDK uses to route the user to the right screen. As of this version it does not feed advertising or ad measurement, which is why Detour is declared as non-tracking and requires no App Tracking Transparency prompt.
+
+### App Store Connect privacy questionnaire
+
+Answer the "nutrition label" questions below for the data Detour collects, on top of whatever your own app collects. For every entry, answer **No** to "Are these data used to track you?" and **Not linked to the user's identity** — unless your own app's use of the same data type says otherwise, in which case the stricter answer wins.
+
+| Question | Answer |
+| --- | --- |
+| Identifiers → **Device ID** | Yes — App Functionality, Analytics |
+| Usage Data → **Product Interaction** | Yes — Analytics, App Functionality |
+| User Content → **Other User Content** | Yes — App Functionality *(skip if you set `shouldUseClipboard: false`)* |
+| Diagnostics / **Other Data** | Yes — App Functionality |
+
+Two things to check against your own configuration:
+
+- **If you set `shouldUseClipboard: false`**, Detour never reads the clipboard, and you can leave User Content out of your App Store Connect answers. The bundled manifest still lists it, because a manifest is static and the option defaults to `true`; the manifest and your questionnaire answers are evaluated separately, so declaring less in App Store Connect than the SDK manifest lists is fine when the SDK genuinely does not collect it in your configuration.
+- **Custom event payloads are yours to declare.** Detour cannot know what you pass in `DetourAnalytics.logEvent(_:data:)`. If you put emails, names, purchase amounts, or any other personal data in that dictionary, declare those data types yourself.
 
 ## Types
 

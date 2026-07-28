@@ -21,4 +21,8 @@ Pod::Spec.new do |s|
   s.swift_version         = '5.5'
 
   s.source_files = 'Sources/Detour/**/*.swift'
+
+  s.resource_bundles = {
+    'Detour_Privacy' => ['Sources/Detour/PrivacyInfo.xcprivacy']
+  }
 end
