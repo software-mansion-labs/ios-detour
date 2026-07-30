@@ -48,7 +48,27 @@ class DeviceUtils {
             guard hasProbableWebURL else { return nil }
         }
 
-        return UIPasteboard.general.string
+        // detectPatterns only reports that a URL sits somewhere in the clipboard, and it is
+        // unavailable before iOS 14, so extract the link ourselves on every version. Only the
+        // URL leaves the device - never text the user happened to copy along with it.
+        guard let clipboard = UIPasteboard.general.string else { return nil }
+        return firstWebURL(in: clipboard)
+    }
+
+    private static func firstWebURL(in text: String) -> String? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return nil
+        }
+
+        let range = NSRange(text.startIndex..., in: text)
+        for match in detector.matches(in: text, options: [], range: range) {
+            guard let url = match.url, let scheme = url.scheme?.lowercased() else { continue }
+            if scheme == "http" || scheme == "https" {
+                return url.absoluteString
+            }
+        }
+
+        return nil
     }
 
     @MainActor

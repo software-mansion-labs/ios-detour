@@ -293,6 +293,64 @@ public enum LinkProcessingMode: String {
 
 A ready-to-run example covering deferred links, Universal Links, and custom scheme links is included at [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject). See the [example setup guide](./ExampleUsage/README.md) for instructions.
 
+## Privacy
+
+Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both Swift Package Manager and CocoaPods, so you do not need to work out its API usage or data collection yourself. It declares Detour as non-tracking (`NSPrivacyTracking = false`, no tracking domains), so no App Tracking Transparency prompt is required. You **do** still need to reflect what Detour collects in your App Store Connect privacy questionnaire — Apple requires the app developer to declare everything the app collects, including via SDKs.
+
+<details>
+<summary>What the manifest declares</summary>
+
+| Declared | Details |
+| --- | --- |
+| `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: a first-launch flag and a locally generated device ID. |
+| `DeviceID` | Random UUID stored on device, sent with analytics events. |
+| `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). |
+| `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
+| `OtherDataTypes` | Deferred-matching fingerprint, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
+
+Every collected type is declared as not linked to the user and not used for tracking. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
+
+</details>
+
+<details>
+<summary>Clipboard access shows a system paste alert</summary>
+
+When the copied content came from another app, iOS presents its own paste-permission modal (`"YourApp" would like to paste from "Safari"`) before your UI appears on first launch, and its default button denies. Detour checks `detectPatterns(for: [.probableWebURL])` first, so the read only happens when the clipboard actually holds a web URL — but that check does not suppress the alert. Set `shouldUseClipboard: false` to skip the read entirely and never show it; deferred matching then runs without the clipboard signal.
+
+</details>
+
+<details>
+<summary>What to answer in App Store Connect</summary>
+
+In App Store Connect, go to your app → **App Privacy** → **Data Types** → **Edit**, and answer **Yes** to "Do you or your third-party partners collect data from this app?".
+
+**Step 1 — tick the applicable boxes.** They're listed here in the order they appear on screen, so you can work top to bottom:
+
+| Category | Tick | Applies when |
+| --- | --- | --- |
+| **User Content** → Other User Content | Yes | Only if you leave `shouldUseClipboard` enabled (the default). Skip it if you set `shouldUseClipboard: false`. |
+| **Identifiers** → Device ID | Yes | Always — Detour generates and stores a random device ID for analytics. |
+| **Usage Data** → Product Interaction | Yes | Always — event names from `logEvent` / `logRetention`, plus universal-link opens. |
+| **Other Data** → Other Data Types | Yes | Always — the deferred-matching fingerprint. |
+
+**Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Device ID**, and so on, and answer the three questions in each:
+
+| Data type | "Used for" (select all that apply) | "Linked to identity" | "Used for tracking" |
+| --- | --- | --- | --- |
+| Other User Content | App Functionality | No | No |
+| Device ID | App Functionality, Analytics | No | No |
+| Product Interaction | App Functionality, Analytics | No | No |
+| Other Data Types | App Functionality | No | No |
+
+These answers mirror [`Sources/Detour/Resources/PrivacyInfo.xcprivacy`](./Sources/Detour/Resources/PrivacyInfo.xcprivacy) exactly, so you can cross-check them against the Privacy Report Xcode generates from your archive.
+
+Two things to double-check for your own app on top of this:
+
+- Detour cannot see what you pass in `DetourAnalytics.logEvent(_:data:)`. If you put personal data there, declare it yourself.
+- Universal-link query parameters are forwarded to Detour as-is. If your links carry personal data in params, that's yours to declare too.
+
+</details>
+
 ## Other Detour SDKs
 
 Detour is also available for other app stacks:
