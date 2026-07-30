@@ -21,7 +21,7 @@ let package = Package(
         .target(
             name: "Detour",
             resources: [
-                .copy("PrivacyInfo.xcprivacy"),
+                .copy("Resources/PrivacyInfo.xcprivacy"),
             ]
         ),
     ]
