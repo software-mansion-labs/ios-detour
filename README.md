@@ -342,7 +342,7 @@ In App Store Connect, go to your app → **App Privacy** → **Data Types** → 
 | Product Interaction | App Functionality, Analytics | No | No |
 | Other Data Types | App Functionality | No | No |
 
-These answers mirror [`Sources/Detour/PrivacyInfo.xcprivacy`](./Sources/Detour/PrivacyInfo.xcprivacy) exactly, so you can cross-check them against the Privacy Report Xcode generates from your archive.
+These answers mirror [`Sources/Detour/Resources/PrivacyInfo.xcprivacy`](./Sources/Detour/Resources/PrivacyInfo.xcprivacy) exactly, so you can cross-check them against the Privacy Report Xcode generates from your archive.
 
 Two things to double-check for your own app on top of this:
 
