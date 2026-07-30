@@ -20,7 +20,7 @@ Sign up here: [https://godetour.dev/auth/signup](https://godetour.dev/auth/signu
 
 ## Installation
 
-Latest stable release: `1.1.0`
+Latest stable release: `1.1.1`
 
 ### Requirements
 
@@ -34,7 +34,7 @@ In Xcode, go to `File > Add Package Dependencies...`, enter the repository URL, 
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/software-mansion-labs/ios-detour", from: "1.1.0")
+.package(url: "https://github.com/software-mansion-labs/ios-detour", from: "1.1.1")
 ```
 
 ### CocoaPods
@@ -46,7 +46,7 @@ platform :ios, '13.0'
 
 target 'YourAppTarget' do
   use_frameworks!
-  pod 'Detour', '1.1.0'
+  pod 'Detour', '1.1.1'
 end
 ```
 
