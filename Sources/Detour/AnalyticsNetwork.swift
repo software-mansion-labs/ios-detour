@@ -43,6 +43,7 @@ enum AnalyticsNetwork {
         eventName: String,
         deviceID: String,
         data: [String: Any]?,
+        clickID: String? = nil,
         kind: String
     ) async {
         guard var request = baseRequest(url: url, config: config) else { return }
@@ -50,6 +51,9 @@ enum AnalyticsNetwork {
         var body = commonBody(eventName: eventName, deviceID: deviceID)
         if let data, JSONSerialization.isValidJSONObject(data) {
             body["data"] = data
+        }
+        if let clickID {
+            body["click_id"] = clickID
         }
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body, options: []) else {
@@ -78,6 +82,7 @@ enum AnalyticsNetwork {
             eventName: eventName,
             deviceID: deviceID,
             data: data,
+            clickID: SessionAttribution.shared.currentClickID,
             kind: "event"
         )
     }

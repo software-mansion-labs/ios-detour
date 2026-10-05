@@ -5,6 +5,7 @@ class DetourNetwork {
 
     private struct LinkResponse: Decodable {
         let link: String?
+        let clickId: String?
     }
 
     private static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
@@ -107,6 +108,10 @@ class DetourNetwork {
 
         do {
             let response = try JSONDecoder().decode(LinkResponse.self, from: responseData)
+
+            if let clickID = response.clickId {
+                SessionAttribution.shared.setClickID(clickID)
+            }
 
             if let linkString = response.link,
                let url = URL(string: linkString) {
@@ -272,6 +277,10 @@ class DetourNetwork {
                 return (allowed: true, clickId: nil)  // fail-open on backend errors
             }
 
+            // Non-Detour opens (e.g. magic-link sign-in) must not clear attribution.
+            if let clickID = decoded?.clickId {
+                SessionAttribution.shared.setClickID(clickID)
+            }
             return (allowed: true, clickId: decoded?.clickId)
         } catch {
             return (allowed: true, clickId: nil)  // fail-open on network errors

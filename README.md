@@ -193,6 +193,8 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
+Events logged in a session that was opened from a Detour link (a deferred install or a Universal/App Link open) are attributed to that link automatically, so you can break them down by path and parameters (e.g. `utm_source`) in the link analytics. No extra code is needed.
+
 If you need analytics without calling `resolveInitialLink`, mount and unmount manually:
 
 ```swift
