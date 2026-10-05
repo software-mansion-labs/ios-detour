@@ -20,4 +20,10 @@ final class SessionAttribution: @unchecked Sendable {
         defer { lock.unlock() }
         self.clickID = clickID
     }
+
+    func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        clickID = nil
+    }
 }

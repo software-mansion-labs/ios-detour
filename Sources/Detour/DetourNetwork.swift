@@ -270,6 +270,8 @@ class DetourNetwork {
                     tag,
                     "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
                 )
+                // A blocked Detour link must not leave the previous click in place.
+                SessionAttribution.shared.clear()
                 return (allowed: false, clickId: nil)
             }
 
