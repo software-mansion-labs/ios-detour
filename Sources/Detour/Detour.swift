@@ -178,6 +178,7 @@ public class Detour {
             DetourLogger.debug(tag, "Processing Universal Link")
         case .scheme:
             DetourLogger.debug(tag, "Processing Scheme Link")
+            LinkAttribution.shared.recordSchemeOpen()
         case .deferred:
             DetourLogger.debug(tag, "Processing Deferred Link")
         }
@@ -187,7 +188,11 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+        let linkType = LinkUtils.detectLinkType(from: url)
+        if linkType == .scheme {
+            LinkAttribution.shared.recordSchemeOpen()
+        }
+        if linkType == .verified, let config {
             let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
             if !clickResult.allowed {
                 return .empty()

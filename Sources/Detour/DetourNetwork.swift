@@ -110,7 +110,7 @@ class DetourNetwork {
             let response = try JSONDecoder().decode(LinkResponse.self, from: responseData)
 
             if let clickID = response.clickId {
-                SessionAttribution.shared.setClickID(clickID)
+                LinkAttribution.shared.recordDeferredOpen(clickID: clickID)
             }
 
             if let linkString = response.link,
@@ -270,8 +270,7 @@ class DetourNetwork {
                     tag,
                     "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
                 )
-                // A blocked Detour link must not leave the previous click in place.
-                SessionAttribution.shared.clear()
+                LinkAttribution.shared.recordBlockedLinkOpen()
                 return (allowed: false, clickId: nil)
             }
 
@@ -281,7 +280,7 @@ class DetourNetwork {
 
             // Non-Detour opens (e.g. magic-link sign-in) must not clear attribution.
             if let clickID = decoded?.clickId {
-                SessionAttribution.shared.setClickID(clickID)
+                LinkAttribution.shared.recordLinkOpen(clickID: clickID)
             }
             return (allowed: true, clickId: decoded?.clickId)
         } catch {
