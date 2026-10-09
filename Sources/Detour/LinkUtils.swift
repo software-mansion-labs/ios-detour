@@ -27,20 +27,25 @@ class LinkUtils {
         return false
     }
 
-    private static func routeFromWebUrl(_ url: URL) -> String {
-        let fullPath = url.path
-        var finalRoute = getRestOfPath(fullPath)
-
-        if let query = url.query {
-            finalRoute += "?\(query)"
+    // url.host and url.path are percent-decoded, so an encoded '?' or '/' would become a delimiter.
+    // URLComponents keeps them encoded, as the Android and RN SDKs do.
+    private static func encodedParts(of url: URL) -> (host: String, path: String, query: String) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return (url.host ?? "", url.path, url.query ?? "")
         }
+        let port = components.port.map { ":\($0)" } ?? ""
+        return ((components.percentEncodedHost ?? "") + port, components.percentEncodedPath, components.percentEncodedQuery ?? "")
+    }
 
-        return finalRoute
+    private static func routeFromWebUrl(_ url: URL) -> String {
+        let parts = encodedParts(of: url)
+        let pathname = getRestOfPath(parts.path)
+        return parts.query.isEmpty ? pathname : "\(pathname)?\(parts.query)"
     }
 
     static func routeFromDeepLink(_ url: URL) -> String {
-        let host = url.host ?? ""
-        let route = host + url.path + (url.query.map { "?\($0)" } ?? "")
+        let parts = encodedParts(of: url)
+        let route = parts.host + parts.path + (parts.query.isEmpty ? "" : "?\(parts.query)")
         return route.hasPrefix("/") ? route : "/\(route)"
     }
 
@@ -55,8 +60,16 @@ class LinkUtils {
         return rawLink
     }
 
+    // Only a scheme before the first ':' makes this a URL, so "/hash/p?redirect=https://x" stays a path.
     static func looksLikeUrl(_ rawLink: String) -> Bool {
-        return rawLink.contains("://") || rawLink.hasPrefix("//")
+        return rawLink.hasPrefix("//") || rawLink.range(of: "^[a-zA-Z][a-zA-Z0-9+.-]*:", options: .regularExpression) != nil
+    }
+
+    // Query of a full link string without the fragment. Unlike URL(string:), it also works with a stray '%'.
+    static func rawQuery(of link: String) -> String? {
+        let withoutFragment = link.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        guard let queryStart = withoutFragment.firstIndex(of: "?") else { return nil }
+        return String(withoutFragment[withoutFragment.index(after: queryStart)...])
     }
 
     static func detectLinkType(from url: URL, override: LinkType? = nil) -> LinkType {
@@ -95,12 +108,18 @@ class LinkUtils {
         for pair in query.split(separator: "&") {
             let components = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
             guard let rawKey = components.first else { continue }
-            let key = String(rawKey).removingPercentEncoding ?? String(rawKey)
-            let rawValue = components.count > 1 ? String(components[1]) : ""
-            let value = rawValue.removingPercentEncoding ?? rawValue
+            let key = decodeQueryComponent(String(rawKey))
+            let value = components.count > 1 ? decodeQueryComponent(String(components[1])) : ""
             result[key] = value
         }
         return result
+    }
+
+    // Match URLSearchParams: '+' is a space, and a '%' that doesn't start an escape stays as text.
+    private static func decodeQueryComponent(_ raw: String) -> String {
+        let spaced = raw.replacingOccurrences(of: "+", with: " ")
+        let escaped = spaced.replacingOccurrences(of: "%(?![0-9A-Fa-f]{2})", with: "%25", options: .regularExpression)
+        return escaped.removingPercentEncoding ?? spaced
     }
 
     static func makeDetourLink(from url: URL, type: LinkType) -> DetourLink {
@@ -117,12 +136,14 @@ class LinkUtils {
 
     static func makeDetourLink(fromPath rawPath: String, type: LinkType) -> DetourLink {
         let normalized = rawPath.hasPrefix("/") ? rawPath : "/\(rawPath)"
-        let parts = normalized.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        // Drop the fragment, as URL parsing does for full links.
+        let withoutFragment = normalized.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        let parts = withoutFragment.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
         let fullPathname = parts.first ?? "/"
-        let query = parts.count > 1 ? parts[1] : nil
+        let query = parts.count > 1 ? parts[1] : ""
 
         let pathname = getRestOfPath(fullPathname)
-        let route = pathname + (query.map { "?\($0)" } ?? "")
+        let route = query.isEmpty ? pathname : "\(pathname)?\(query)"
 
         return DetourLink(
             url: normalized,
