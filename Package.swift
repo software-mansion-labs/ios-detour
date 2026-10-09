@@ -24,5 +24,9 @@ let package = Package(
                 .copy("Resources/PrivacyInfo.xcprivacy"),
             ]
         ),
+        .testTarget(
+            name: "DetourTests",
+            dependencies: ["Detour"]
+        ),
     ]
 )

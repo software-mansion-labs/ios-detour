@@ -226,9 +226,8 @@ class DetourNetwork {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
         let osVersionString = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-        let urlParams = URLComponents(string: url)?.queryItems?.reduce(into: [String: String]()) {
-            $0[$1.name] = $1.value ?? ""
-        }
+        let parsedParams = LinkUtils.parseParams(from: LinkUtils.rawQuery(of: url))
+        let urlParams = parsedParams.isEmpty ? nil : parsedParams
 
         let requestBody = RequestBody(
             link_id: linkId,
