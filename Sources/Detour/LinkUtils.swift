@@ -1,6 +1,8 @@
 import Foundation
 
 class LinkUtils {
+    private static let strayPercentPattern = "%(?![0-9A-Fa-f]{2})"
+
     static func getRestOfPath(_ pathname: String) -> String {
         // Safety check: needs at least 2 chars (e.g. "/a") to possibly have a second slash
         if pathname.count < 2 { return "/" }
@@ -60,6 +62,11 @@ class LinkUtils {
         return rawLink
     }
 
+    // URL(string:) encodes every '%' in the query again when one '%' is invalid, so escape the invalid ones first.
+    static func parseUrl(_ link: String) -> URL? {
+        URL(string: link.replacingOccurrences(of: strayPercentPattern, with: "%25", options: .regularExpression))
+    }
+
     // Only a scheme before the first ':' makes this a URL, so "/hash/p?redirect=https://x" stays a path.
     static func looksLikeUrl(_ rawLink: String) -> Bool {
         return rawLink.hasPrefix("//") || rawLink.range(of: "^[a-zA-Z][a-zA-Z0-9+.-]*:", options: .regularExpression) != nil
@@ -86,7 +93,7 @@ class LinkUtils {
         }
 
         let normalized = normalizeRawLink(rawLink)
-        guard let parsedUrl = URL(string: normalized) else {
+        guard let parsedUrl = parseUrl(normalized) else {
             return rawLink
         }
 
@@ -118,7 +125,7 @@ class LinkUtils {
     // Match URLSearchParams: '+' is a space, and a '%' that doesn't start an escape stays as text.
     private static func decodeQueryComponent(_ raw: String) -> String {
         let spaced = raw.replacingOccurrences(of: "+", with: " ")
-        let escaped = spaced.replacingOccurrences(of: "%(?![0-9A-Fa-f]{2})", with: "%25", options: .regularExpression)
+        let escaped = spaced.replacingOccurrences(of: strayPercentPattern, with: "%25", options: .regularExpression)
         return escaped.removingPercentEncoding ?? spaced
     }
 

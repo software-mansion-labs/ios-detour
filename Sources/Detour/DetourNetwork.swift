@@ -109,7 +109,7 @@ class DetourNetwork {
             let response = try JSONDecoder().decode(LinkResponse.self, from: responseData)
 
             if let linkString = response.link,
-               let url = URL(string: linkString) {
+               let url = LinkUtils.parseUrl(linkString) {
                 DetourLogger.debug(tag, "Link matched successfully")
                 let detourLink = LinkUtils.makeDetourLink(from: url, type: linkType)
                 DispatchQueue.main.async {
@@ -152,7 +152,7 @@ class DetourNetwork {
 
             let decodedResponse = try JSONDecoder().decode(LinkResponse.self, from: data)
             guard let linkString = decodedResponse.link,
-                  let resolvedURL = URL(string: linkString) else {
+                  let resolvedURL = LinkUtils.parseUrl(linkString) else {
                 return nil
             }
 

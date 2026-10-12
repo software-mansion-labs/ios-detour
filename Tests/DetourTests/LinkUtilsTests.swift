@@ -46,6 +46,12 @@ final class LinkUtilsTests: XCTestCase {
         )
     }
 
+    func testParseUrlKeepsValidEscapesNextToStrayPercent() {
+        let url = LinkUtils.parseUrl("https://x.com/abc/p?a=50%off&b=hello%20world")!
+        let link = LinkUtils.makeDetourLink(from: url, type: .verified)
+        XCTAssertEqual(link.params, ["a": "50%off", "b": "hello world"])
+    }
+
     func testRawQueryIgnoresFragment() {
         XCTAssertEqual(LinkUtils.rawQuery(of: "https://x.com/abc/promo?id=5#section"), "id=5")
         XCTAssertNil(LinkUtils.rawQuery(of: "https://x.com/abc/promo#section?id=5"))

@@ -61,7 +61,7 @@ public class Detour {
         }
 
         let normalized = LinkUtils.normalizeRawLink(rawLink)
-        guard let url = URL(string: normalized) else {
+        guard let url = LinkUtils.parseUrl(normalized) else {
             let isWeb = LinkUtils.isWebUrl(rawLink)
             if !isWeb && mode != .all {
                 DetourLogger.debug(tag, "Custom scheme link ignored in mode \(mode.rawValue)")
