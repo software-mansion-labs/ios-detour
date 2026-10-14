@@ -144,7 +144,7 @@ public class Detour {
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using probabilistic matching")
 
-        Task {
+        Task { [weak self] in
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred) { [weak self] result in
                 Task { @MainActor in

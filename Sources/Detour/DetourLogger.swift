@@ -33,30 +33,14 @@ enum DetourLogger {
     }
 
     private static func log(tag: String, level: Level, message: String) {
-        if #available(iOS 14.0, *) {
-            let logger = Logger(subsystem: subsystem, category: tag)
-            switch level {
-            case .debug:
-                logger.log(level: .debug, "\(message, privacy: .public)")
-            case .warn:
-                logger.log(level: .default, "\(message, privacy: .public)")
-            case .error:
-                logger.log(level: .error, "\(message, privacy: .public)")
-            }
-            return
-        }
-
-        let osLog = OSLog(subsystem: subsystem, category: tag)
-        let logType: OSLogType
+        let logger = Logger(subsystem: subsystem, category: tag)
         switch level {
         case .debug:
-            logType = .debug
+            logger.log(level: .debug, "\(message, privacy: .public)")
         case .warn:
-            logType = .default
+            logger.log(level: .default, "\(message, privacy: .public)")
         case .error:
-            logType = .error
+            logger.log(level: .error, "\(message, privacy: .public)")
         }
-
-        os_log("%{public}@", log: osLog, type: logType, message)
     }
 }

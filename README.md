@@ -24,7 +24,7 @@ Latest stable release: `1.1.2`
 
 ### Requirements
 
-- iOS 13.0+
+- iOS 15.0+
 - Swift 5.5+
 
 ### Swift Package Manager
@@ -42,7 +42,7 @@ Or in `Package.swift`:
 In your `Podfile`:
 
 ```ruby
-platform :ios, '13.0'
+platform :ios, '15.0'
 
 target 'YourAppTarget' do
   use_frameworks!

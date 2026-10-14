@@ -33,24 +33,13 @@ class DeviceUtils {
     private static func readClipboardLinkIfAvailable(shouldUseClipboard: Bool) async -> String? {
         guard shouldUseClipboard else { return nil }
 
-        if #available(iOS 14.0, *) {
-            let hasProbableWebURL = await withCheckedContinuation { continuation in
-                UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { result in
-                    switch result {
-                    case .success(let patterns):
-                        continuation.resume(returning: patterns.contains(.probableWebURL))
-                    case .failure:
-                        continuation.resume(returning: false)
-                    }
-                }
-            }
+        let webURLPattern: PartialKeyPath<UIPasteboard.DetectedValues> = \.probableWebURL
+        let detectedPatterns = try? await UIPasteboard.general.detectedPatterns(for: [webURLPattern])
+        guard detectedPatterns?.contains(webURLPattern) == true else { return nil }
 
-            guard hasProbableWebURL else { return nil }
-        }
-
-        // detectPatterns only reports that a URL sits somewhere in the clipboard, and it is
-        // unavailable before iOS 14, so extract the link ourselves on every version. Only the
-        // URL leaves the device - never text the user happened to copy along with it.
+        // detectedPatterns only reports that a URL sits somewhere in the clipboard, so extract
+        // the link ourselves. Only the URL leaves the device - never text the user happened
+        // to copy along with it.
         guard let clipboard = UIPasteboard.general.string else { return nil }
         return firstWebURL(in: clipboard)
     }
