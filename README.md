@@ -193,6 +193,10 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
+Events are automatically attributed to Detour links, so you can filter and break them down by path and parameters (e.g. `utm_source`) in the dashboard. No extra code is needed.
+
+Each event carries the link the app was installed from (kept on the device for good) and the link that opened the app in the current run, if any. The opening link lasts until the app is closed (by the user or the system) or another Detour link opens it. Events logged before a link is resolved (early in startup, before the deferred match or link-open request returns) are not attributed to it.
+
 If you need analytics without calling `resolveInitialLink`, mount and unmount manually:
 
 ```swift

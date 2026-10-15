@@ -5,6 +5,7 @@ class DetourNetwork {
 
     private struct LinkResponse: Decodable {
         let link: String?
+        let clickId: String?
     }
 
     private static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
@@ -107,6 +108,10 @@ class DetourNetwork {
 
         do {
             let response = try JSONDecoder().decode(LinkResponse.self, from: responseData)
+
+            if let clickID = response.clickId {
+                LinkAttribution.shared.recordDeferredOpen(clickID: clickID)
+            }
 
             if let linkString = response.link,
                let url = LinkUtils.parseUrl(linkString) {
@@ -264,6 +269,7 @@ class DetourNetwork {
                     tag,
                     "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
                 )
+                LinkAttribution.shared.recordBlockedLinkOpen()
                 return (allowed: false, clickId: nil)
             }
 
@@ -271,6 +277,10 @@ class DetourNetwork {
                 return (allowed: true, clickId: nil)  // fail-open on backend errors
             }
 
+            // Non-Detour opens (e.g. magic-link sign-in) must not clear attribution.
+            if let clickID = decoded?.clickId {
+                LinkAttribution.shared.recordLinkOpen(clickID: clickID)
+            }
             return (allowed: true, clickId: decoded?.clickId)
         } catch {
             return (allowed: true, clickId: nil)  // fail-open on network errors
