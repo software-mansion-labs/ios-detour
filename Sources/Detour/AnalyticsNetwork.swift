@@ -74,7 +74,7 @@ enum AnalyticsNetwork {
     static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String) async {
         await send(
             config: config,
-            url: DetourConstants.analyticsEventUrl,
+            url: DetourEndpoints.url(.analyticsEvent, config: config),
             eventName: eventName,
             deviceID: deviceID,
             data: data,
@@ -85,7 +85,7 @@ enum AnalyticsNetwork {
     static func sendRetentionEvent(config: DetourConfig, eventName: String, deviceID: String) async {
         await send(
             config: config,
-            url: DetourConstants.analyticsRetentionUrl,
+            url: DetourEndpoints.url(.analyticsRetention, config: config),
             eventName: eventName,
             deviceID: deviceID,
             data: nil,
