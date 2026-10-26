@@ -216,8 +216,11 @@ public struct DetourConfig {
     public let appID: String
     public let shouldUseClipboard: Bool       // default: true
     public let linkProcessingMode: LinkProcessingMode  // default: .all
+    public let baseURL: URL?                  // default: nil (production Detour API)
 }
 ```
+
+`baseURL` points the SDK at another Detour API host, for tests and non-production environments. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseURL` is set, the SDK logs a warning on first use so a test host does not end up in a production build.
 
 </details>
 

@@ -32,7 +32,7 @@ class DetourNetwork {
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
 
-        guard let apiUrl = DetourConstants.apiUrl else {
+        guard let apiUrl = DetourEndpoints.url(.matchLink, config: config) else {
             logAndFail("Configuration Error: Invalid API URL", completion: completion)
             return
         }
@@ -125,7 +125,7 @@ class DetourNetwork {
     }
 
     static func resolveShortLink(config: DetourConfig, url: String) async -> URL? {
-        guard let endpoint = DetourConstants.resolveShortUrl else {
+        guard let endpoint = DetourEndpoints.url(.resolveShort, config: config) else {
             DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Short link resolution failed: invalid endpoint")
             return nil
         }
@@ -180,7 +180,7 @@ class DetourNetwork {
     }
 
     static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
-        guard let endpoint = DetourConstants.universalLinkClickUrl else {
+        guard let endpoint = DetourEndpoints.url(.universalLinkClick, config: config) else {
             return (allowed: true, clickId: nil)  // fail-open
         }
 
