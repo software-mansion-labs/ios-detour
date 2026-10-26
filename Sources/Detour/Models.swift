@@ -5,17 +5,21 @@ public struct DetourConfig: Sendable {
     public let appID: String
     public let shouldUseClipboard: Bool
     public let linkProcessingMode: LinkProcessingMode
+    /// Detour API host for tests and non-production environments. `nil` uses the production Detour API.
+    public let baseURL: URL?
 
     public init(
         apiKey: String,
         appID: String,
         shouldUseClipboard: Bool = true,
-        linkProcessingMode: LinkProcessingMode = .all
+        linkProcessingMode: LinkProcessingMode = .all,
+        baseURL: URL? = nil
     ) {
         self.apiKey = apiKey
         self.appID = appID
         self.shouldUseClipboard = shouldUseClipboard
         self.linkProcessingMode = linkProcessingMode
+        self.baseURL = baseURL
     }
 }
 
