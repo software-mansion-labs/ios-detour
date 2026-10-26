@@ -27,7 +27,7 @@ class DetourNetwork {
 
     static func matchLink(
         config: DetourConfig,
-        fingerprint: ProbabilisticFingerprint,
+        request matchRequest: SignalMatchRequest,
         linkType: LinkType = .deferred,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
@@ -39,9 +39,9 @@ class DetourNetwork {
 
         let httpBody: Data
         do {
-            httpBody = try JSONEncoder().encode(fingerprint)
+            httpBody = try JSONEncoder().encode(matchRequest)
         } catch {
-            logAndFail("Encoding Error: Failed to encode fingerprint - \(error.localizedDescription)", completion: completion)
+            logAndFail("Encoding Error: Failed to encode match request - \(error.localizedDescription)", completion: completion)
             return
         }
 
@@ -50,7 +50,7 @@ class DetourNetwork {
         applyHeaders(to: &request, config: config)
         request.httpBody = httpBody
 
-        DetourLogger.debug(tag, "Sending fingerprint to API")
+        DetourLogger.debug(tag, "Sending match request to API")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             handleResponse(

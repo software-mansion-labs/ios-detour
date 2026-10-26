@@ -309,7 +309,7 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 | `DeviceID` | Random UUID stored on device, sent with analytics events. |
 | `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). |
 | `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
-| `OtherDataTypes` | Deferred-matching fingerprint, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
+| `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
 
 Every collected type is declared as not linked to the user and not used for tracking. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
 
@@ -334,7 +334,7 @@ In App Store Connect, go to your app → **App Privacy** → **Data Types** → 
 | **User Content** → Other User Content | Yes | Only if you leave `shouldUseClipboard` enabled (the default). Skip it if you set `shouldUseClipboard: false`. |
 | **Identifiers** → Device ID | Yes | Always — Detour generates and stores a random device ID for analytics. |
 | **Usage Data** → Product Interaction | Yes | Always — event names from `logEvent` / `logRetention`, plus universal-link opens. |
-| **Other Data** → Other Data Types | Yes | Always — the deferred-matching fingerprint. |
+| **Other Data** → Other Data Types | Yes | Always — the deferred-matching signals. |
 
 **Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Device ID**, and so on, and answer the three questions in each:
 

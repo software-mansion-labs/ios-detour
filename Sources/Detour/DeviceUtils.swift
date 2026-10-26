@@ -2,7 +2,7 @@ import UIKit
 import WebKit
 
 class DeviceUtils {
-    private static let tag = "FingerprintCollector"
+    private static let tag = "SignalCollector"
 
     @MainActor
     private static var webView: WKWebView?
@@ -14,13 +14,13 @@ class DeviceUtils {
 
             webView?.evaluateJavaScript("navigator.userAgent") { result, error in
                 if let error = error {
-                    DetourLogger.warn(tag, "[Detour:FINGERPRINT] WebKit userAgent retrieval failed: \(error.localizedDescription)")
+                    DetourLogger.warn(tag, "[Detour:SIGNALS] WebKit userAgent retrieval failed: \(error.localizedDescription)")
                 }
 
                 if let ua = result as? String {
                     continuation.resume(returning: ua)
                 } else {
-                    DetourLogger.warn(tag, "[Detour:FINGERPRINT] WebKit userAgent result was nil")
+                    DetourLogger.warn(tag, "[Detour:SIGNALS] WebKit userAgent result was nil")
                     continuation.resume(returning: "")
                 }
 
@@ -61,7 +61,7 @@ class DeviceUtils {
     }
 
     @MainActor
-    static func getFingerprint(shouldUseClipboard: Bool) async -> ProbabilisticFingerprint {
+    static func collectSignals(shouldUseClipboard: Bool) async -> SignalMatchRequest {
         let device = UIDevice.current
         let screen = UIScreen.main
 
@@ -71,7 +71,7 @@ class DeviceUtils {
 
         let userAgent = await getRealUserAgent()
 
-        return ProbabilisticFingerprint(
+        return SignalMatchRequest(
             platform: "ios",
             model: device.model,
             manufacturer: "Apple",
