@@ -66,7 +66,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         await AnalyticsNetwork.sendRetentionEvent(config: config, eventName: "app_open", deviceID: "device")
 
         let matched = expectation(description: "match-link completed")
-        DetourNetwork.matchLink(config: config, fingerprint: Self.fingerprint) { _ in matched.fulfill() }
+        DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
         await fulfillment(of: [matched], timeout: 5)
 
         XCTAssertEqual(
@@ -82,13 +82,13 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         await AnalyticsNetwork.sendEvent(config: config, eventName: "test", data: nil, deviceID: "device")
 
         let matched = expectation(description: "match-link completed")
-        DetourNetwork.matchLink(config: config, fingerprint: Self.fingerprint) { _ in matched.fulfill() }
+        DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
         await fulfillment(of: [matched], timeout: 5)
 
         XCTAssertTrue(RecordingURLProtocol.recordedURLs.isEmpty)
     }
 
-    private static let fingerprint = ProbabilisticFingerprint(
+    private static let matchRequest = SignalMatchRequest(
         platform: "ios",
         model: "iPhone",
         manufacturer: "Apple",

@@ -57,7 +57,7 @@ public struct DetourLink: Sendable {
     }
 }
 
-struct ProbabilisticFingerprint: Codable {
+struct SignalMatchRequest: Codable {
     let platform: String
     let model: String
     let manufacturer: String
