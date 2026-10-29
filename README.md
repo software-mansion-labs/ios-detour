@@ -92,6 +92,8 @@ func application(
 
 SceneDelegate:
 
+With scenes, iOS passes the launch link only in `connectionOptions`, never in `launchOptions`. If you also call the AppDelegate variant, the SceneDelegate call still opens that link.
+
 <details>
 <summary>SceneDelegate example</summary>
 
