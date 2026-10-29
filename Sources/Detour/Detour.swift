@@ -7,7 +7,13 @@ public class Detour {
     public static let shared = Detour()
 
     private var isSessionHandled = false
+    // A scene app gets its launch link only in connectionOptions. When the app delegate asked for the
+    // initial link first and found none, the scene's link still opens and replaces the deferred link.
+    private var canSceneOpenLaunchLink = false
+    private var isDeferredLinkReplaced = false
     private let tag = "Detour"
+    var linkOpens = LinkOpens()
+    var universalLinkClicks = UniversalLinkClicks()
     
     private init() {} // Private init to force use of 'shared'
 
@@ -21,6 +27,8 @@ public class Detour {
 
     public func resetSession(allowDeferredRetry: Bool = false) {
         isSessionHandled = false
+        canSceneOpenLaunchLink = false
+        isDeferredLinkReplaced = false
         DetourLogger.debug(tag, "Session reset")
         if allowDeferredRetry {
             StorageUtils.resetFirstEntrance()
@@ -153,6 +161,12 @@ public class Detour {
                         return
                     }
 
+                    if self.isDeferredLinkReplaced {
+                        DetourLogger.debug(self.tag, "Deferred link dropped, the scene launch link opened instead")
+                        completion(.empty())
+                        return
+                    }
+
                     let filteredResult = self.filterNonWebUrlLikeLinks(result, mode: config.linkProcessingMode)
                     if filteredResult.link == nil {
                         DetourLogger.debug(self.tag, "No deferred link matched")
@@ -186,14 +200,50 @@ public class Detour {
     }
 
     // Processes URL and optionally resolves web short-links when config is provided.
+    // Returns an empty result when an earlier call already delivered this link open.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified, let config {
-            let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
-            if !clickResult.allowed {
+        guard linkOpens.claimCallbackLink(url.absoluteString) else {
+            DetourLogger.debug(tag, "Link already delivered for this open")
+            return .empty()
+        }
+        return await openLink(url, config: config)
+    }
+
+    private func openLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
+        let linkType = LinkUtils.detectLinkType(from: url)
+        if let mode = config?.linkProcessingMode, !mode.handles(linkType) {
+            DetourLogger.debug(tag, "Link of type \(linkType.rawValue) ignored in mode \(mode.rawValue)")
+            return .empty()
+        }
+
+        if linkType == .verified, let config {
+            let click = await universalLinkClicks.record(config: config, url: url.absoluteString)
+            if !click.allowed {
                 return .empty()
             }
         }
         return await processLink(url.absoluteString, config: config)
+    }
+
+    private func openLaunchLink(
+        _ url: URL,
+        config: DetourConfig,
+        willBeRedelivered: Bool,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        StorageUtils.markFirstEntrance()
+        isSessionHandled = true
+
+        guard linkOpens.claimLaunchLink(url.absoluteString, willBeRedelivered: willBeRedelivered) else {
+            DetourLogger.debug(tag, "Launch link already delivered by processLink")
+            completion(.empty())
+            return
+        }
+
+        Task {
+            let result = await openLink(url, config: config)
+            completion(result)
+        }
     }
 
     // Converts a raw link string into a DetourResult with route and link type.
@@ -207,114 +257,77 @@ public class Detour {
     }
     
     public func resolveInitialLink(
-            config: DetourConfig,
-            launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
-            completion: @escaping @Sendable (DetourResult) -> Void
-        ) {
-            mountAnalytics(config: config)
-            
-            func returnEmpty() { completion(.empty()) }
-            
-            if isSessionHandled {
-                DetourLogger.debug(tag, "Session already handled")
-                returnEmpty()
-                return
-            }
-            
-            if config.linkProcessingMode != .deferredOnly {
-                if let launchURL = launchOptions?[.url] as? URL,
-                   !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
-                {
-                    DetourLogger.debug(tag, "Processing launch URL")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
-                    Task {
-                        let result = await processLink(launchURL.absoluteString, config: config)
-                        completion(result)
-                    }
-                    return
-                }
-
-                let activities = browsingWebActivities(from: launchOptions)
-                if let universalURL = activities.compactMap(\.webpageURL).first,
-                   !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
-                {
-                    DetourLogger.debug(tag, "Processing Universal Link")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
-                    Task {
-                        let result = await processLink(universalURL, config: config)
-                        completion(result)
-                    }
-                    return
-                }
-
-                if !activities.isEmpty {
-                    DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
-                    // UIApplicationDelegate will invoke continueUserActivity next.
-                    returnEmpty()
-                    return
-                }
-            }
-
-            DetourLogger.debug(tag, "Falling back to deferred link resolution")
-            resolveDeferredInitialLink(config: config, completion: completion)
-        }
+        config: DetourConfig,
+        launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        let activities = browsingWebActivities(from: launchOptions)
+        let launch = LaunchContext(
+            url: firstOpenableURL([launchOptions?[.url] as? URL] + activities.map(\.webpageURL)),
+            hasBrowsingActivity: !activities.isEmpty,
+            isScene: false
+        )
+        resolveInitialLink(config: config, launch: launch, completion: completion)
+    }
 
     public func resolveInitialLink(
         config: DetourConfig,
         connectionOptions: UIScene.ConnectionOptions,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
+        let activities = browsingWebActivities(from: connectionOptions)
+        let launch = LaunchContext(
+            url: firstOpenableURL([connectionOptions.urlContexts.first?.url] + activities.map(\.webpageURL)),
+            hasBrowsingActivity: !activities.isEmpty,
+            isScene: true
+        )
+        resolveInitialLink(config: config, launch: launch, completion: completion)
+    }
+
+    private func firstOpenableURL(_ urls: [URL?]) -> URL? {
+        urls.compactMap { $0 }.first { !LinkUtils.isInfrastructureUrl($0.absoluteString) }
+    }
+
+    func resolveInitialLink(
+        config: DetourConfig,
+        launch: LaunchContext,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
         mountAnalytics(config: config)
 
-        func returnEmpty() { completion(.empty()) }
+        let launchURL = config.linkProcessingMode == .deferredOnly ? nil : launch.url
 
         if isSessionHandled {
+            if launch.isScene, canSceneOpenLaunchLink, let launchURL {
+                DetourLogger.debug(tag, "Processing scene launch link instead of the deferred link")
+                canSceneOpenLaunchLink = false
+                isDeferredLinkReplaced = true
+                openLaunchLink(launchURL, config: config, willBeRedelivered: false, completion: completion)
+                return
+            }
+
             DetourLogger.debug(tag, "Session already handled")
-            returnEmpty()
+            completion(.empty())
             return
         }
 
-        if config.linkProcessingMode != .deferredOnly {
-            if let openURL = connectionOptions.urlContexts.first?.url,
-               !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
-            {
-                DetourLogger.debug(tag, "Processing launch URL")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
-                Task {
-                    let result = await processLink(openURL.absoluteString, config: config)
-                    completion(result)
-                }
-                return
-            }
-
-            let activities = browsingWebActivities(from: connectionOptions)
-            if let universalURL = activities.compactMap(\.webpageURL).first,
-               !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
-            {
-                DetourLogger.debug(tag, "Processing Universal Link")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
-                Task {
-                    let result = await processLink(universalURL, config: config)
-                    completion(result)
-                }
-                return
-            }
-
-            if !activities.isEmpty {
-                DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
-                returnEmpty()
-                return
-            }
+        if let launchURL {
+            DetourLogger.debug(tag, "Processing launch link")
+            // Without scenes, iOS passes this link once more to open url or continueUserActivity.
+            // A scene gets it only in connectionOptions, not in scene(_:continue:) or scene(_:openURLContexts:).
+            openLaunchLink(launchURL, config: config, willBeRedelivered: !launch.isScene, completion: completion)
+            return
         }
 
+        if config.linkProcessingMode != .deferredOnly, launch.hasBrowsingActivity {
+            DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
+            StorageUtils.markFirstEntrance()
+            isSessionHandled = true
+            completion(.empty())
+            return
+        }
+
+        canSceneOpenLaunchLink = !launch.isScene
         DetourLogger.debug(tag, "Falling back to deferred link resolution")
         resolveDeferredInitialLink(config: config, completion: completion)
     }

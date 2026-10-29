@@ -92,6 +92,8 @@ func application(
 
 SceneDelegate:
 
+With scenes, iOS passes the launch link only in `connectionOptions`, never in `launchOptions`. If you also call the AppDelegate variant, the SceneDelegate call still opens that link.
+
 <details>
 <summary>SceneDelegate example</summary>
 
@@ -114,6 +116,8 @@ func scene(
 ### 3. Handle runtime links
 
 Handle custom scheme and Universal Links that arrive while the app is running:
+
+On cold start iOS passes the launch link to `resolveInitialLink` and then once more to these callbacks. Detour delivers and counts each link open once, so `processLink` returns a result without a link for the repeat.
 
 <details>
 <summary>Custom scheme</summary>

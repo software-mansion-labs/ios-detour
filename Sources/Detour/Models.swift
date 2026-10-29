@@ -23,6 +23,17 @@ public enum LinkProcessingMode: String, Sendable {
     case all
     case webOnly = "web-only"
     case deferredOnly = "deferred-only"
+
+    func handles(_ linkType: LinkType) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .webOnly:
+            return linkType != .scheme
+        case .deferredOnly:
+            return linkType == .deferred
+        }
+    }
 }
 
 public enum LinkType: String, Codable, Sendable {
@@ -90,4 +101,12 @@ public struct DetourResult: Sendable {
     public static func empty() -> DetourResult {
         return DetourResult(processed: true, link: nil)
     }
+}
+
+// What resolveInitialLink reads from launchOptions or connectionOptions.
+struct LaunchContext {
+    let url: URL?
+    // Checked only when `url` is nil: the activity has no usable URL, so the continue callback brings the link.
+    let hasBrowsingActivity: Bool
+    let isScene: Bool
 }
