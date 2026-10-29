@@ -179,9 +179,10 @@ class DetourNetwork {
         }
     }
 
-    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
+    // Returns nil when the click was not saved, so it can be sent again.
+    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> UniversalLinkClick? {
         guard let endpoint = DetourConstants.universalLinkClickUrl else {
-            return (allowed: true, clickId: nil)  // fail-open
+            return nil
         }
 
         struct Metadata: Encodable {
@@ -243,7 +244,7 @@ class DetourNetwork {
         )
 
         guard let body = try? JSONEncoder().encode(requestBody) else {
-            return (allowed: true, clickId: nil)
+            return nil
         }
 
         var request = URLRequest(url: endpoint)
@@ -254,7 +255,7 @@ class DetourNetwork {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return (allowed: true, clickId: nil) }
+            guard let http = response as? HTTPURLResponse else { return nil }
 
             let decoded = try? JSONDecoder().decode(ResponseBody.self, from: data)
             let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
@@ -268,12 +269,14 @@ class DetourNetwork {
             }
 
             if !(200...299).contains(http.statusCode) {
-                return (allowed: true, clickId: nil)  // fail-open on backend errors
+                DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Universal link click not saved: \(http.statusCode)")
+                return nil
             }
 
             return (allowed: true, clickId: decoded?.clickId)
         } catch {
-            return (allowed: true, clickId: nil)  // fail-open on network errors
+            DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Universal link click not saved: \(error.localizedDescription)")
+            return nil
         }
     }
 }

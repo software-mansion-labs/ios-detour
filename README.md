@@ -115,6 +115,8 @@ func scene(
 
 Handle custom scheme and Universal Links that arrive while the app is running:
 
+On cold start iOS passes the launch link to `resolveInitialLink` and then once more to these callbacks. Detour delivers and counts each link open once, so `processLink` returns a result without a link for the repeat.
+
 <details>
 <summary>Custom scheme</summary>
 

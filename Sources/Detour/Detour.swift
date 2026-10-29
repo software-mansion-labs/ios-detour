@@ -8,6 +8,8 @@ public class Detour {
 
     private var isSessionHandled = false
     private let tag = "Detour"
+    var linkOpens = LinkOpens()
+    var universalLinkClicks = UniversalLinkClicks()
     
     private init() {} // Private init to force use of 'shared'
 
@@ -186,14 +188,44 @@ public class Detour {
     }
 
     // Processes URL and optionally resolves web short-links when config is provided.
+    // Returns an empty result when an earlier call already delivered this link open.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
+        guard linkOpens.claimCallbackLink(url.absoluteString) else {
+            DetourLogger.debug(tag, "Link already delivered for this open")
+            return .empty()
+        }
+        return await openLink(url, config: config)
+    }
+
+    private func openLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
         if LinkUtils.detectLinkType(from: url) == .verified, let config {
-            let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
-            if !clickResult.allowed {
+            let click = await universalLinkClicks.record(config: config, url: url.absoluteString)
+            if !click.allowed {
                 return .empty()
             }
         }
         return await processLink(url.absoluteString, config: config)
+    }
+
+    private func openLaunchLink(
+        _ url: URL,
+        config: DetourConfig,
+        willBeRedelivered: Bool,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        StorageUtils.markFirstEntrance()
+        isSessionHandled = true
+
+        guard linkOpens.claimLaunchLink(url.absoluteString, willBeRedelivered: willBeRedelivered) else {
+            DetourLogger.debug(tag, "Launch link already delivered by processLink")
+            completion(.empty())
+            return
+        }
+
+        Task {
+            let result = await openLink(url, config: config)
+            completion(result)
+        }
     }
 
     // Converts a raw link string into a DetourResult with route and link type.
@@ -226,12 +258,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing launch URL")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
-                    Task {
-                        let result = await processLink(launchURL.absoluteString, config: config)
-                        completion(result)
-                    }
+                    openLaunchLink(launchURL, config: config, willBeRedelivered: true, completion: completion)
                     return
                 }
 
@@ -240,12 +267,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing Universal Link")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
-                    Task {
-                        let result = await processLink(universalURL, config: config)
-                        completion(result)
-                    }
+                    openLaunchLink(universalURL, config: config, willBeRedelivered: true, completion: completion)
                     return
                 }
 
@@ -279,16 +301,12 @@ public class Detour {
         }
 
         if config.linkProcessingMode != .deferredOnly {
+            // On cold start iOS gives a scene its link only here, not in scene(_:continue:) or scene(_:openURLContexts:).
             if let openURL = connectionOptions.urlContexts.first?.url,
                !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing launch URL")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
-                Task {
-                    let result = await processLink(openURL.absoluteString, config: config)
-                    completion(result)
-                }
+                openLaunchLink(openURL, config: config, willBeRedelivered: false, completion: completion)
                 return
             }
 
@@ -297,12 +315,7 @@ public class Detour {
                !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing Universal Link")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
-                Task {
-                    let result = await processLink(universalURL, config: config)
-                    completion(result)
-                }
+                openLaunchLink(universalURL, config: config, willBeRedelivered: false, completion: completion)
                 return
             }
 
