@@ -198,7 +198,13 @@ public class Detour {
     }
 
     private func openLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+        let linkType = LinkUtils.detectLinkType(from: url)
+        if let mode = config?.linkProcessingMode, !mode.handles(linkType) {
+            DetourLogger.debug(tag, "Link of type \(linkType.rawValue) ignored in mode \(mode.rawValue)")
+            return .empty()
+        }
+
+        if linkType == .verified, let config {
             let click = await universalLinkClicks.record(config: config, url: url.absoluteString)
             if !click.allowed {
                 return .empty()
