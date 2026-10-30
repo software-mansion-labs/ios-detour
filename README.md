@@ -201,6 +201,14 @@ Detour.shared.mountAnalytics(config: config)
 Detour.shared.unmountAnalytics()
 ```
 
+To link events to your own user account, pass your user identifier after the user signs in, and `nil` after sign-out. Do not pass an e-mail address or a phone number.
+
+```swift
+Detour.shared.setUserId("u_12345")
+// ...
+Detour.shared.setUserId(nil)
+```
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
@@ -217,8 +225,11 @@ public struct DetourConfig {
     public let shouldUseClipboard: Bool       // default: true
     public let linkProcessingMode: LinkProcessingMode  // default: .all
     public let baseURL: URL?                  // default: nil (production Detour API)
+    public let userIdValidator: (@Sendable (String) -> Bool)?  // default: nil
 }
 ```
+
+`userIdValidator` runs on every `setUserId` call; returning `false` drops the value and clears the stored one. It applies once the config was passed to `resolveInitialLink` or `mountAnalytics`.
 
 `baseURL` points the SDK at another Detour API host, for tests and non-production environments. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseURL` is set, the SDK logs a warning on first use so a test host does not end up in a production build.
 
@@ -305,8 +316,8 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 
 | Declared | Details |
 | --- | --- |
-| `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: a first-launch flag and a locally generated device ID. |
-| `DeviceID` | Random UUID stored on device, sent with analytics events. |
+| `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: the user ID set with `setUserId`. |
+| `DeviceID` | Random UUID generated on first launch, sent with deferred matching and analytics events. Stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. |
 | `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). |
 | `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
 | `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |

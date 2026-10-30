@@ -169,7 +169,7 @@ class DetourNetwork {
         }
     }
 
-    private static func deviceModel() -> String {
+    static func deviceModel() -> String {
         var systemInfo = utsname()
         uname(&systemInfo)
         return withUnsafePointer(to: &systemInfo.machine) {

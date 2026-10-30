@@ -62,8 +62,8 @@ final class DetourNetworkBaseURLTests: XCTestCase {
 
         _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
         _ = await DetourNetwork.sendUniversalLinkClick(config: config, url: "https://app.godetour.link/abc")
-        await AnalyticsNetwork.sendEvent(config: config, eventName: "test", data: nil, deviceID: "device")
-        await AnalyticsNetwork.sendRetentionEvent(config: config, eventName: "app_open", deviceID: "device")
+        await AnalyticsNetwork.sendEvent(config: config, eventName: "test", data: nil, deviceID: "device", userID: nil)
+        await AnalyticsNetwork.sendRetentionEvent(config: config, eventName: "app_open", deviceID: "device", userID: nil)
 
         let matched = expectation(description: "match-link completed")
         DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
@@ -79,7 +79,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         let config = DetourConfig(apiKey: "key", appID: "app", baseURL: URL(string: "http://api.example.com"))
 
         _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
-        await AnalyticsNetwork.sendEvent(config: config, eventName: "test", data: nil, deviceID: "device")
+        await AnalyticsNetwork.sendEvent(config: config, eventName: "test", data: nil, deviceID: "device", userID: nil)
 
         let matched = expectation(description: "match-link completed")
         DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
@@ -100,7 +100,9 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         timezone: "Europe/Warsaw",
         userAgent: "test",
         timestamp: 0,
-        pastedLink: nil
+        pastedLink: nil,
+        deviceID: "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01",
+        userID: nil
     )
 }
 
