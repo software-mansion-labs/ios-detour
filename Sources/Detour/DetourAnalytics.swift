@@ -38,20 +38,23 @@ public final class DetourAnalytics {
             guard self != nil else { return }
 
             Task {
-                let deviceID = DeviceIDPersistence.shared.prepareDeviceID()
+                let deviceID = InstallStore.shared.deviceID
+                let userID = UserIdStore.current
 
                 if payload.isRetention {
                     await AnalyticsNetwork.sendRetentionEvent(
                         config: config,
                         eventName: payload.eventName,
-                        deviceID: deviceID
+                        deviceID: deviceID,
+                        userID: userID
                     )
                 } else {
                     await AnalyticsNetwork.sendEvent(
                         config: config,
                         eventName: payload.eventName,
                         data: payload.data,
-                        deviceID: deviceID
+                        deviceID: deviceID,
+                        userID: userID
                     )
                 }
             }

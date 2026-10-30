@@ -7,19 +7,24 @@ public struct DetourConfig: Sendable {
     public let linkProcessingMode: LinkProcessingMode
     /// Detour API host for tests and non-production environments. `nil` uses the production Detour API.
     public let baseURL: URL?
+    /// Called on `Detour.shared.setUserId`; returning `false` drops the value. Use it to reject values
+    /// that must not leave the device, such as e-mail addresses or phone numbers.
+    public let userIdValidator: (@Sendable (String) -> Bool)?
 
     public init(
         apiKey: String,
         appID: String,
         shouldUseClipboard: Bool = true,
         linkProcessingMode: LinkProcessingMode = .all,
-        baseURL: URL? = nil
+        baseURL: URL? = nil,
+        userIdValidator: (@Sendable (String) -> Bool)? = nil
     ) {
         self.apiKey = apiKey
         self.appID = appID
         self.shouldUseClipboard = shouldUseClipboard
         self.linkProcessingMode = linkProcessingMode
         self.baseURL = baseURL
+        self.userIdValidator = userIdValidator
     }
 }
 
@@ -70,6 +75,15 @@ struct SignalMatchRequest: Codable {
     let userAgent: String
     let timestamp: Int64
     let pastedLink: String?
+    let deviceID: String
+    let userID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case platform, model, manufacturer, systemVersion, screenWidth, screenHeight, scale
+        case locale, timezone, userAgent, timestamp, pastedLink
+        case deviceID = "device_id"
+        case userID = "user_id"
+    }
 }
 
 struct LocaleTag: Codable {

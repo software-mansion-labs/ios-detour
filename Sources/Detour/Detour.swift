@@ -7,12 +7,39 @@ public class Detour {
     public static let shared = Detour()
 
     private var isSessionHandled = false
+    private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
     
     private init() {} // Private init to force use of 'shared'
 
     public func mountAnalytics(config: DetourConfig) {
+        userIdValidator = config.userIdValidator
         DetourAnalytics.mount(config: config)
+    }
+
+    /// Sets the app's own user identifier, sent with every later request. `nil` removes it.
+    /// Must not be an e-mail address or a phone number. `DetourConfig.userIdValidator` applies only
+    /// after the config was passed to `resolveInitialLink` or `mountAnalytics`, so call this after them.
+    public func setUserId(_ userId: String?) {
+        guard let userId else {
+            UserIdStore.current = nil
+            return
+        }
+
+        // A rejected value also clears the previous one, so requests never go out
+        // with the identifier of the user the app has just switched away from.
+        guard UserIdPolicy.isAllowed(userId), userIdValidator?(userId) ?? true else {
+            DetourLogger.warn(tag, "[Detour:IDENTITY] setUserId value rejected by the validator; not stored or sent.")
+            UserIdStore.current = nil
+            return
+        }
+
+        UserIdStore.current = userId
+    }
+
+    private func markSessionHandled() {
+        InstallStore.shared.markFirstLaunchHandled()
+        isSessionHandled = true
     }
 
     public func unmountAnalytics() {
@@ -23,8 +50,8 @@ public class Detour {
         isSessionHandled = false
         DetourLogger.debug(tag, "Session reset")
         if allowDeferredRetry {
-            StorageUtils.resetFirstEntrance()
-            DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
+            InstallStore.shared.resetFirstLaunch()
+            DetourLogger.debug(tag, "Deferred retry enabled - first-launch flag reset")
         }
     }
 
@@ -132,20 +159,23 @@ public class Detour {
         config: DetourConfig,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
-        if !StorageUtils.isFirstEntrance() {
+        if !InstallStore.shared.isFirstLaunch {
             DetourLogger.debug(tag, "Not first launch")
             isSessionHandled = true
             completion(.empty())
             return
         }
 
-        StorageUtils.markFirstEntrance()
-        isSessionHandled = true
+        markSessionHandled()
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
-            let matchRequest = await DeviceUtils.collectSignals(shouldUseClipboard: config.shouldUseClipboard)
+            let matchRequest = await DeviceUtils.collectSignals(
+                shouldUseClipboard: config.shouldUseClipboard,
+                deviceID: InstallStore.shared.deviceID,
+                userID: UserIdStore.current
+            )
             DetourNetwork.matchLink(config: config, request: matchRequest, linkType: .deferred) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
@@ -226,8 +256,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing launch URL")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     Task {
                         let result = await processLink(launchURL.absoluteString, config: config)
                         completion(result)
@@ -240,8 +269,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing Universal Link")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     Task {
                         let result = await processLink(universalURL, config: config)
                         completion(result)
@@ -251,8 +279,7 @@ public class Detour {
 
                 if !activities.isEmpty {
                     DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     // UIApplicationDelegate will invoke continueUserActivity next.
                     returnEmpty()
                     return
@@ -283,8 +310,7 @@ public class Detour {
                !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing launch URL")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 Task {
                     let result = await processLink(openURL.absoluteString, config: config)
                     completion(result)
@@ -297,8 +323,7 @@ public class Detour {
                !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing Universal Link")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 Task {
                     let result = await processLink(universalURL, config: config)
                     completion(result)
@@ -308,8 +333,7 @@ public class Detour {
 
             if !activities.isEmpty {
                 DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 returnEmpty()
                 return
             }
