@@ -10,6 +10,7 @@ struct RequestContext: Encodable {
     var installSource: String?
     var networkType: String?
     var locale: String?
+    var sessionID: String?
     var attStatus: String?
 
     enum CodingKeys: String, CodingKey {
@@ -19,6 +20,7 @@ struct RequestContext: Encodable {
         case installSource = "install_source"
         case networkType = "network_type"
         case locale
+        case sessionID = "session_id"
         case attStatus = "att_status"
     }
 
@@ -31,6 +33,7 @@ struct RequestContext: Encodable {
             installSource: installSource(),
             networkType: NetworkTypeMonitor.shared.currentType,
             locale: Locale.preferredLanguages.first,
+            sessionID: SessionManager.shared.currentSessionID,
             attStatus: attStatus()
         )
     }

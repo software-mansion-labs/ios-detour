@@ -1,6 +1,6 @@
 import Foundation
 
-typealias AnalyticsListener = (AnalyticsEventPayload) -> Void
+typealias AnalyticsListener = (AnalyticsRequest) -> Void
 
 @MainActor
 final class AnalyticsEmitter {
@@ -22,7 +22,7 @@ final class AnalyticsEmitter {
         listeners[token] = nil
     }
 
-    func emit(_ payload: AnalyticsEventPayload) {
+    func emit(_ payload: AnalyticsRequest) {
         let snapshot = Array(listeners.values)
 
         if snapshot.isEmpty {

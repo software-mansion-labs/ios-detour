@@ -21,3 +21,69 @@ final class RequestContextTests: XCTestCase {
         XCTAssertNil(json["context"])
     }
 }
+
+final class SessionManagerTests: XCTestCase {
+    private var clock = Date(timeIntervalSince1970: 1_730_000_000)
+    private var events: [SessionManager.Event] = []
+    private lazy var manager = SessionManager(now: { [unowned self] in self.clock })
+
+    override func setUp() {
+        super.setUp()
+        manager.start { [unowned self] in self.events.append($0) }
+    }
+
+    override func tearDown() {
+        manager.stop()
+        super.tearDown()
+    }
+
+    private var startedID: String {
+        guard case let .start(id, _) = events.first else { return "" }
+        return id
+    }
+
+    func testBackgroundReportsTheEndWithItsDuration() {
+        clock += 600
+        manager.appDidEnterBackground()
+
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.last, .end(sessionID: startedID, at: clock, duration: 600))
+        XCTAssertEqual(manager.currentSessionID, startedID)
+    }
+
+    func testShortTripToTheBackgroundKeepsTheSession() {
+        manager.appDidEnterBackground()
+        clock += SessionManager.backgroundTimeout
+        manager.appWillEnterForeground()
+
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(manager.currentSessionID, startedID)
+    }
+
+    func testLongTripToTheBackgroundStartsANewSession() {
+        manager.appDidEnterBackground()
+        clock += SessionManager.backgroundTimeout + 1
+        manager.appWillEnterForeground()
+
+        XCTAssertEqual(events.count, 3)
+        guard case let .start(newID, at) = events.last else { return XCTFail("expected a new start") }
+        XCTAssertNotEqual(newID, startedID)
+        XCTAssertEqual(at, clock)
+        XCTAssertEqual(manager.currentSessionID, newID)
+    }
+
+    func testSessionBodyFollowsTheContract() throws {
+        let body = AnalyticsNetwork.body(
+            of: .session(.end(sessionID: "8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", at: clock, duration: 1.2345)),
+            deviceID: "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01",
+            userID: "u_12345"
+        )
+
+        XCTAssertEqual(body["type"] as? String, "end")
+        XCTAssertEqual(body["session_id"] as? String, "8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e")
+        XCTAssertEqual(body["duration_ms"] as? Int, 1235)
+        XCTAssertEqual(body["timestamp"] as? String, "2024-10-27T03:33:20.000Z")
+        XCTAssertEqual(body["user_id"] as? String, "u_12345")
+    }
+}
+
