@@ -318,7 +318,7 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 | --- | --- |
 | `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: the user ID set with `setUserId`. |
 | `DeviceID` | Random UUID generated on first launch, sent with deferred matching and analytics events. Stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. |
-| `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). |
+| `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). Events and deferred matching also carry the app version and build number, OS version, network type (Wi-Fi, cellular, other), install source (App Store or sandbox) and the App Tracking Transparency status, which Detour only reads and never requests; events also carry the preferred language. |
 | `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
 | `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
 

@@ -21,20 +21,18 @@ enum AnalyticsNetwork {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
-        request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
+        DetourNetwork.applyHeaders(to: &request, config: config)
         return request
     }
 
     private static func commonBody(eventName: String, deviceID: String, userID: String?) -> [String: Any] {
-        var body: [String: Any] = [
+        var body = RequestContext.current().dictionary
+        body.merge([
             "event_name": eventName,
             "timestamp": makeTimestamp(),
             "platform": "ios",
             "device_id": deviceID,
-        ]
+        ]) { _, own in own }
         if let userID {
             body["user_id"] = userID
         }

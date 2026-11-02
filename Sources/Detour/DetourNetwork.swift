@@ -7,11 +7,12 @@ class DetourNetwork {
         let link: String?
     }
 
-    private static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
+    static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
+        request.setValue(DetourConstants.sdkPackageHeaderValue, forHTTPHeaderField: DetourConstants.sdkPackageHeaderField)
     }
 
     private static func logAndFail(
@@ -39,7 +40,9 @@ class DetourNetwork {
 
         let httpBody: Data
         do {
-            httpBody = try JSONEncoder().encode(matchRequest)
+            httpBody = try JSONEncoder().encode(
+                WithContext(body: matchRequest, context: RequestContext.current().forMatchLink())
+            )
         } catch {
             logAndFail("Encoding Error: Failed to encode match request - \(error.localizedDescription)", completion: completion)
             return
