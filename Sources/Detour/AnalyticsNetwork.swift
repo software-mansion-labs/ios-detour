@@ -18,6 +18,7 @@ enum AnalyticsNetwork {
         case .event: return .analyticsEvent
         case .retention: return .analyticsRetention
         case .session: return .analyticsSession
+        case .conversion: return .analyticsConversion
         }
     }
 
@@ -40,6 +41,19 @@ enum AnalyticsNetwork {
                 "timestamp": timestamp(at),
                 "duration_ms": Int((duration * 1000).rounded()),
             ]
+        case let .conversion(conversion, at):
+            var fields: [String: Any] = [
+                "name": conversion.name,
+                // NSDecimalNumber keeps the exact amount; a Double would turn 0.001234 into 0.0012339999...
+                "revenue": NSDecimalNumber(decimal: conversion.revenue),
+                "currency": conversion.currency,
+                "revenue_type": conversion.revenueType.rawValue,
+                "timestamp": timestamp(at),
+            ]
+            fields["product_id"] = conversion.productId
+            fields["quantity"] = conversion.quantity
+            fields["transaction_id"] = conversion.transactionId
+            return fields
         }
     }
 

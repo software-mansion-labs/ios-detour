@@ -14,6 +14,7 @@ final class DetourEndpointsTests: XCTestCase {
             .analyticsEvent: "https://godetour.dev/api/analytics/event",
             .analyticsRetention: "https://godetour.dev/api/analytics/retention",
             .analyticsSession: "https://godetour.dev/api/analytics/session",
+            .analyticsConversion: "https://godetour.dev/api/analytics/conversion",
         ]
         XCTAssertEqual(Set(expected.keys), Set(DetourEndpoint.allCases))
 
@@ -67,6 +68,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
             .event(name: "test", data: nil),
             .retention(name: "app_open"),
             .session(.start(sessionID: "8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", at: Date())),
+            .conversion(DetourConversion(name: "purchase", revenue: 4.99, currency: "USD", revenueType: .iap), at: Date()),
         ]
         for request in requests {
             await AnalyticsNetwork.send(request, config: config, deviceID: "device", userID: nil)

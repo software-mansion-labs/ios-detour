@@ -87,3 +87,31 @@ final class SessionManagerTests: XCTestCase {
     }
 }
 
+final class ConversionBodyTests: XCTestCase {
+    private func json(_ conversion: DetourConversion) throws -> [String: Any] {
+        let body = AnalyticsNetwork.body(
+            of: .conversion(conversion, at: Date(timeIntervalSince1970: 1_730_000_000)),
+            deviceID: "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01",
+            userID: nil
+        )
+        let data = try JSONSerialization.data(withJSONObject: body)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    func testSendsTheContractFieldsWithExactRevenue() throws {
+        let body = try json(DetourConversion(
+            name: "ad_impression",
+            revenue: Decimal(string: "0.001234")!,
+            currency: "USD",
+            revenueType: .inAppAds,
+            transactionId: "t_1"
+        ))
+
+        XCTAssertEqual(body["revenue_type"] as? String, "in_app_ads")
+        XCTAssertEqual((body["revenue"] as? NSNumber)?.decimalValue, Decimal(string: "0.001234"))
+        XCTAssertEqual(body["transaction_id"] as? String, "t_1")
+        XCTAssertEqual(body["timestamp"] as? String, "2024-10-27T03:33:20.000Z")
+        XCTAssertNil(body["product_id"])
+        XCTAssertNil(body["quantity"])
+    }
+}

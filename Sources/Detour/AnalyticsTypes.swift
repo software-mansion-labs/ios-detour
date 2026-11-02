@@ -26,4 +26,5 @@ enum AnalyticsRequest {
     case event(name: String, data: [String: Any]?)
     case retention(name: String)
     case session(SessionManager.Event)
+    case conversion(DetourConversion, at: Date)
 }

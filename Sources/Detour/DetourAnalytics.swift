@@ -31,6 +31,10 @@ public final class DetourAnalytics {
         shared.logRetention(eventName)
     }
 
+    public static func logConversion(_ conversion: DetourConversion) {
+        shared.logConversion(conversion)
+    }
+
     public func mount(config: DetourConfig) {
         guard !isMounted else { return }
         isMounted = true
@@ -85,11 +89,21 @@ public final class DetourAnalytics {
     }
 
     public func logEvent(_ eventName: String, data: [String: Any]? = nil) {
+        if eventName == DetourEventName.purchase.rawValue, data?["revenue"] != nil {
+            DetourLogger.warn(
+                "DetourAnalytics",
+                "[Detour:DEPRECATION] Revenue in logEvent(.purchase) is deprecated and not counted as revenue. Use logConversion instead."
+            )
+        }
         AnalyticsEmitter.shared.emit(.event(name: eventName, data: data))
     }
 
     public func logRetention(_ eventName: String) {
         AnalyticsEmitter.shared.emit(.retention(name: eventName))
+    }
+
+    public func logConversion(_ conversion: DetourConversion) {
+        AnalyticsEmitter.shared.emit(.conversion(conversion, at: Date()))
     }
 }
 

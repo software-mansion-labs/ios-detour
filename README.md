@@ -209,6 +209,22 @@ Detour.shared.setUserId("u_12345")
 Detour.shared.setUserId(nil)
 ```
 
+To report revenue, log a conversion. Use `.iap` for purchases and subscriptions and `.inAppAds` for ad revenue; pass the store's transaction ID so a repeated purchase is counted once. `logEvent(.purchase)` with a `revenue` value is deprecated and does not count as revenue.
+
+```swift
+DetourAnalytics.logConversion(DetourConversion(
+    name: "purchase",
+    revenue: Decimal(string: "4.99")!,
+    currency: "USD",
+    revenueType: .iap,
+    productId: "coins_500",
+    quantity: 1,
+    transactionId: transaction.id.description
+))
+```
+
+Sessions are reported automatically while analytics is mounted.
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
@@ -361,6 +377,7 @@ These answers mirror [`Sources/Detour/Resources/PrivacyInfo.xcprivacy`](./Source
 Two things to double-check for your own app on top of this:
 
 - Detour cannot see what you pass in `DetourAnalytics.logEvent(_:data:)`. If you put personal data there, declare it yourself.
+- If you call `DetourAnalytics.logConversion`, Detour receives the product ID, quantity and revenue of each purchase. Declare **Purchases** → Purchase History for Analytics yourself; the manifest does not include it yet.
 - Universal-link query parameters are forwarded to Detour as-is. If your links carry personal data in params, that's yours to declare too.
 
 </details>
