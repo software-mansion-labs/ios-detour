@@ -21,8 +21,10 @@ public enum DetourEventName: String, CaseIterable {
     case adImpression = "ad_impression"
 }
 
-struct AnalyticsEventPayload {
-    let eventName: String
-    let data: [String: Any]?
-    let isRetention: Bool
+/// One analytics request; `AnalyticsNetwork.send` builds its body and endpoint.
+enum AnalyticsRequest {
+    case event(name: String, data: [String: Any]?)
+    case retention(name: String)
+    case session(SessionManager.Event)
+    case conversion(DetourConversion, at: Date)
 }
