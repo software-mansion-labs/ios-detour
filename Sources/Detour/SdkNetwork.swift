@@ -34,4 +34,51 @@ enum SdkNetwork {
             return .failed
         }
     }
+
+    static func sendConsent(
+        _ consent: DetourConsent,
+        consentText: String?,
+        config: DetourConfig,
+        deviceID: String,
+        userID: String?
+    ) async {
+        guard let consentFields = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(consent)) else { return }
+
+        var body: [String: Any] = ["device_id": deviceID, "consent": consentFields]
+        body["user_id"] = userID
+        body["consent_text"] = consentText
+
+        guard let status = await post(.sdkConsent, body: body, config: config) else { return }
+        if !(200 ... 299).contains(status) {
+            DetourLogger.warn(tag, "[Detour:CONSENT] sdk/consent send failed: \(status)")
+        }
+    }
+
+    /// The response status, or nil when no response arrived.
+    static func post(
+        _ endpoint: DetourEndpoint,
+        body: [String: Any],
+        config: DetourConfig,
+        timeout: TimeInterval? = nil
+    ) async -> Int? {
+        guard let url = DetourEndpoints.url(endpoint, config: config),
+              let bodyData = try? JSONSerialization.data(withJSONObject: body)
+        else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let timeout {
+            request.timeoutInterval = timeout
+        }
+        DetourNetwork.applyHeaders(to: &request, config: config)
+        request.httpBody = bodyData
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode
+        } catch {
+            DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] \(endpoint.rawValue) exception: \(error.localizedDescription)")
+            return nil
+        }
+    }
 }

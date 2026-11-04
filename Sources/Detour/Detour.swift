@@ -10,6 +10,7 @@ public class Detour {
     private var config: DetourConfig?
     private var isStarted = false
     private var runOnStart: [() -> Void] = []
+    private var consentToSend: (consent: DetourConsent, text: String?)?
     private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
 
@@ -27,6 +28,10 @@ public class Detour {
             _ = InstallStore.shared.deviceID
             SdkConfigStore.shared.load(appID: config.appID)
             refreshSdkConfig(config)
+            if let consentToSend {
+                self.consentToSend = nil
+                sendConsent(consentToSend.consent, text: consentToSend.text, config: config)
+            }
         }
 
         if autoStart {
@@ -53,7 +58,36 @@ public class Detour {
         Task {
             let store = SdkConfigStore.shared
             let result = await SdkNetwork.fetchConfig(config: config, etag: store.etag)
-            store.apply(result, appID: config.appID)
+            if store.apply(result, appID: config.appID) {
+                DetourAnalytics.shared.reevaluateWaiting()
+            }
+        }
+    }
+
+    /// Passes the user's choice from your consent platform. Call it on every launch once the
+    /// platform has the choice, not only when it changes: a choice stored on an earlier launch
+    /// can stop requests for a purpose, but a grant counts only once passed again on this launch.
+    /// `consentText` is the text the user agreed to, stored once per version on the Detour server.
+    public func setConsent(_ consent: DetourConsent, consentText: String? = nil) {
+        var consent = consent
+        if consent.schemaVersion == nil {
+            consent.schemaVersion = SdkConfigStore.shared.current.schemaVersion
+        }
+        ConsentStore.record(consent)
+        DetourAnalytics.shared.reevaluateWaiting()
+
+        if let config {
+            sendConsent(consent, text: consentText, config: config)
+        } else {
+            consentToSend = (consent, consentText)
+        }
+    }
+
+    private func sendConsent(_ consent: DetourConsent, text: String?, config: DetourConfig) {
+        let deviceID = InstallStore.shared.deviceID
+        let userID = UserIdStore.current
+        Task {
+            await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID)
         }
     }
 

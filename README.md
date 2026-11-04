@@ -192,6 +192,19 @@ Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) {
 Detour.shared.start()
 ```
 
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start` only after it.
+
+```swift
+Detour.shared.setConsent(
+    DetourConsent(
+        purposes: [DetourPurpose.analytics: true, DetourPurpose.adNetworkSharing: false],
+        consentTextRef: "cmp-v12",
+        source: "cmp"
+    ),
+    consentText: noticeText
+)
+```
+
 ## Analytics
 
 Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:

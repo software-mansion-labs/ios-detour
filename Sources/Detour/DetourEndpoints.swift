@@ -9,6 +9,7 @@ enum DetourEndpoint: String, CaseIterable {
     case analyticsSession = "api/analytics/session"
     case analyticsConversion = "api/analytics/conversion"
     case sdkConfig = "api/sdk/config"
+    case sdkConsent = "api/sdk/consent"
 }
 
 enum DetourEndpoints {

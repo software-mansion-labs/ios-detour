@@ -16,7 +16,7 @@ struct SdkConfig: Equatable {
     // (API contract, consent gate fallback). Every other value comes from the server.
     static let fallback = SdkConfig(
         schemaVersion: 1,
-        consentGateDefaults: ["analytics": .open]
+        consentGateDefaults: [DetourPurpose.analytics: .open]
     )
 
     /// A purpose the config does not list waits for consent.

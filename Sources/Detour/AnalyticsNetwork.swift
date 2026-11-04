@@ -9,7 +9,7 @@ enum AnalyticsNetwork {
         return formatter
     }()
 
-    private static func timestamp(_ date: Date = Date()) -> String {
+    private static func timestamp(_ date: Date) -> String {
         return timestampFormatter.string(from: date)
     }
 
@@ -24,14 +24,14 @@ enum AnalyticsNetwork {
 
     private static func fields(of request: AnalyticsRequest) -> [String: Any] {
         switch request {
-        case let .event(name, data):
-            var fields: [String: Any] = ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+        case let .event(name, data, at):
+            var fields: [String: Any] = ["event_name": name, "timestamp": timestamp(at), "platform": "ios"]
             if let data, JSONSerialization.isValidJSONObject(data) {
                 fields["data"] = data
             }
             return fields
-        case let .retention(name):
-            return ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+        case let .retention(name, at):
+            return ["event_name": name, "timestamp": timestamp(at), "platform": "ios"]
         case let .session(.start(sessionID, at)):
             return ["type": "start", "session_id": sessionID, "timestamp": timestamp(at)]
         case let .session(.end(sessionID, at, duration)):
