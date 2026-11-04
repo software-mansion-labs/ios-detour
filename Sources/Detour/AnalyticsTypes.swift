@@ -23,8 +23,8 @@ public enum DetourEventName: String, CaseIterable {
 
 /// One analytics request; `AnalyticsNetwork.send` builds its body and endpoint.
 enum AnalyticsRequest {
-    case event(name: String, data: [String: Any]?)
-    case retention(name: String)
+    case event(name: String, data: [String: Any]?, at: Date)
+    case retention(name: String, at: Date)
     case session(SessionManager.Event)
     case conversion(DetourConversion, at: Date)
 }

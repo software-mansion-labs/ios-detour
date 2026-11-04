@@ -7,19 +7,128 @@ public class Detour {
     public static let shared = Detour()
 
     private var isSessionHandled = false
+    private var config: DetourConfig?
+    private var isStarted = false
+    private var runOnStart: [() -> Void] = []
+    private var consentToSend: (consent: DetourConsent, text: String?)?
+    private var killSwitchReporter: KillSwitchReporter?
     private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
-    
+
     private init() {} // Private init to force use of 'shared'
 
-    public func mountAnalytics(config: DetourConfig) {
-        userIdValidator = config.userIdValidator
+    /// Sets up the SDK without sending user data. With `autoStart: false` nothing that collects data
+    /// runs until `start()`, so the app can wait for its consent platform first. Routing of links
+    /// the user taps works either way. Only the first config is used.
+    public func configure(_ config: DetourConfig, autoStart: Bool = true) {
+        if self.config != nil {
+            DetourLogger.warn(tag, "[Detour:CONFIG] configure called again; the first config is kept.")
+        } else {
+            self.config = config
+            userIdValidator = config.userIdValidator
+            _ = InstallStore.shared.deviceID
+            SdkConfigStore.shared.load(appID: config.appID)
+            refreshSdkConfig(config)
+            killSwitchReporter = KillSwitchReporter(store: .shared) { enabled, date in
+                await SdkNetwork.sendKillSwitch(enabled: enabled, at: date, config: config, deviceID: InstallStore.shared.deviceID)
+            }
+            killSwitchReporter?.sync()
+            if let consentToSend {
+                self.consentToSend = nil
+                sendConsent(consentToSend.consent, text: consentToSend.text, config: config)
+            }
+        }
+
+        if autoStart {
+            start()
+        }
+    }
+
+    /// Starts analytics, sessions and deferred link matching. Call it after `configure`.
+    public func start() {
+        guard let config else {
+            DetourLogger.warn(tag, "[Detour:CONFIG] start called before configure; nothing started.")
+            return
+        }
+
+        isStarted = true
         DetourAnalytics.mount(config: config)
+        let waiting = runOnStart
+        runOnStart = []
+        waiting.forEach { $0() }
+    }
+
+    // Once per launch, so a value changed on the server reaches the app on its next launch.
+    private func refreshSdkConfig(_ config: DetourConfig) {
+        guard InstallStore.shared.isEnabled else { return }
+        Task {
+            let store = SdkConfigStore.shared
+            let result = await SdkNetwork.fetchConfig(config: config, etag: store.etag)
+            if store.apply(result, appID: config.appID) {
+                DetourAnalytics.shared.reevaluateWaiting()
+            }
+        }
+    }
+
+    /// Passes the user's choice from your consent platform. Call it on every launch once the
+    /// platform has the choice, not only when it changes: a choice stored on an earlier launch
+    /// can stop requests for a purpose, but a grant counts only once passed again on this launch.
+    /// `consentText` is the text the user agreed to, stored once per version on the Detour server.
+    public func setConsent(_ consent: DetourConsent, consentText: String? = nil) {
+        var consent = consent
+        if consent.schemaVersion == nil {
+            consent.schemaVersion = SdkConfigStore.shared.current.schemaVersion
+        }
+        ConsentStore.record(consent)
+        DetourAnalytics.shared.reevaluateWaiting()
+
+        if let config {
+            sendConsent(consent, text: consentText, config: config)
+        } else {
+            consentToSend = (consent, consentText)
+        }
+    }
+
+    private func sendConsent(_ consent: DetourConsent, text: String?, config: DetourConfig) {
+        guard InstallStore.shared.isEnabled else { return }
+        let deviceID = InstallStore.shared.deviceID
+        let userID = UserIdStore.current
+        Task {
+            await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID)
+        }
+    }
+
+    /// `false` turns the SDK off for this install, also on later launches, until `setEnabled(true)`.
+    /// While off it sends nothing: no analytics, sessions, conversions, consent or deferred link
+    /// matching. Links the user taps are still routed. The device ID does not change.
+    public func setEnabled(_ enabled: Bool) {
+        guard InstallStore.shared.setEnabled(enabled, at: Date()) else { return }
+        // Drops what waited for consent when the SDK goes off.
+        DetourAnalytics.shared.reevaluateWaiting()
+        killSwitchReporter?.sync()
+    }
+
+    private func whenStarted(_ work: @escaping () -> Void) {
+        if isStarted {
+            work()
+        } else {
+            runOnStart.append(work)
+        }
+    }
+
+    /// `configure` and `start` in one call, as in SDK 1.x. After `configure(_:autoStart: false)`
+    /// it does not start anything; call `start()` instead.
+    public func mountAnalytics(config: DetourConfig) {
+        if self.config == nil {
+            configure(config)
+        } else if isStarted {
+            start()
+        }
     }
 
     /// Sets the app's own user identifier, sent with every later request. `nil` removes it.
     /// Must not be an e-mail address or a phone number. `DetourConfig.userIdValidator` applies only
-    /// after the config was passed to `resolveInitialLink` or `mountAnalytics`, so call this after them.
+    /// after `configure` (or `resolveInitialLink` / `mountAnalytics`), so call this after it.
     public func setUserId(_ userId: String?) {
         guard let userId else {
             UserIdStore.current = nil
@@ -166,8 +275,25 @@ public class Detour {
             return
         }
 
-        markSessionHandled()
+        // The first-launch flag is stored only when matching runs, so an app closed before
+        // `start()` still matches on its next launch.
+        isSessionHandled = true
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
+        whenStarted { [weak self] in
+            self?.matchDeferredLink(config: config, completion: completion)
+        }
+    }
+
+    private func matchDeferredLink(
+        config: DetourConfig,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        markSessionHandled()
+        guard InstallStore.shared.isEnabled else {
+            DetourLogger.debug(tag, "SDK disabled; deferred link matching skipped")
+            completion(.empty())
+            return
+        }
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
@@ -217,7 +343,8 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+        // The click is Detour's measurement, not routing, so the kill switch stops it.
+        if LinkUtils.detectLinkType(from: url) == .verified, let config, InstallStore.shared.isEnabled {
             let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
             if !clickResult.allowed {
                 return .empty()
