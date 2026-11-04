@@ -53,7 +53,7 @@ struct InitialLinkSession {
     }
 
     mutating func action(for launch: LaunchContext, mode: LinkProcessingMode) -> InitialLinkAction {
-        let url = mode == .deferredOnly ? nil : launch.url
+        let url = launch.url.flatMap { mode.handles(LinkUtils.detectLinkType(from: $0)) ? $0 : nil }
 
         switch state {
         case .notHandled:

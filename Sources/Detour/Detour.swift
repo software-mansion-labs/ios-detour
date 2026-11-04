@@ -11,7 +11,17 @@ public class Detour {
     private var universalLinkClicks = UniversalLinkClickRecorder()
     private let tag = "Detour"
 
-    private init() {} // Private init to force use of 'shared'
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: nil
+        ) { _ in
+            Task { @MainActor in
+                self.linkOpens.stopAwaitingRedelivery()
+            }
+        }
+    }
 
     public func mountAnalytics(config: DetourConfig) {
         DetourAnalytics.mount(config: config)
@@ -191,11 +201,11 @@ public class Detour {
     }
 
     // Processes URL and optionally resolves web short-links when config is provided.
-    // Returns an empty result when an earlier call already delivered this link open.
+    // When an earlier call already delivered this link open, the result has isAlreadyDelivered set.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
         guard linkOpens.claimCallbackLink(url.absoluteString) else {
             DetourLogger.debug(tag, "Link already delivered for this open")
-            return .empty()
+            return .alreadyDelivered()
         }
         return await openLink(url, config: config)
     }
@@ -225,7 +235,7 @@ public class Detour {
 
         guard linkOpens.claimLaunchLink(url.absoluteString, source: source) else {
             DetourLogger.debug(tag, "Launch link already delivered by processLink")
-            completion(.empty())
+            completion(.alreadyDelivered())
             return
         }
 

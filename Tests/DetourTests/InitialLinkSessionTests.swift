@@ -44,6 +44,13 @@ final class InitialLinkSessionTests: XCTestCase {
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .deferredOnly), .skip)
     }
 
+    func testWebOnlySchemeLaunchLinkFallsBackToDeferredLink() {
+        var session = InitialLinkSession()
+        let schemeLink = URL(string: "myapp://product/42")!
+
+        XCTAssertEqual(session.action(for: .appDelegate(url: schemeLink), mode: .webOnly), .resolveDeferred)
+    }
+
     func testResetStartsNewSession() {
         var session = InitialLinkSession()
 

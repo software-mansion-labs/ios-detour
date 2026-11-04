@@ -86,10 +86,14 @@ struct LocaleTag: Codable {
 public struct DetourResult: Sendable {
     public let processed: Bool
     public let link: DetourLink?
-    
-    public init(processed: Bool, link: DetourLink?) {
+    // An earlier call already delivered this link open. The app should ignore the result
+    // and not handle the URL itself, or it opens the link twice.
+    public let isAlreadyDelivered: Bool
+
+    public init(processed: Bool, link: DetourLink?, isAlreadyDelivered: Bool = false) {
         self.processed = processed
         self.link = link
+        self.isAlreadyDelivered = isAlreadyDelivered
     }
 
     public var route: String? { link?.route }
@@ -100,5 +104,9 @@ public struct DetourResult: Sendable {
 
     public static func empty() -> DetourResult {
         return DetourResult(processed: true, link: nil)
+    }
+
+    static func alreadyDelivered() -> DetourResult {
+        DetourResult(processed: true, link: nil, isAlreadyDelivered: true)
     }
 }

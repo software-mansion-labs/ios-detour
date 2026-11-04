@@ -29,6 +29,12 @@ struct LinkOpens {
         return true
     }
 
+    // A real second tap needs the user to leave the app first, and iOS redelivers the launch link before that.
+    // So after the app leaves the foreground, the launch link must not swallow that tap.
+    mutating func stopAwaitingRedelivery() {
+        opens.removeAll { $0 == .awaitingRedelivery }
+    }
+
     mutating func claimCallbackLink(_ url: String) -> Bool {
         if let earlier = opens.get(url) {
             switch earlier.stored {

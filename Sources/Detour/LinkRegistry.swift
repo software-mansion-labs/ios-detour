@@ -2,8 +2,9 @@ import Foundation
 
 enum MonotonicClock {
     // Unlike Date, it does not jump when the user changes the device time.
+    // Unlike systemUptime, it keeps counting while the device sleeps.
     static func now() -> TimeInterval {
-        ProcessInfo.processInfo.systemUptime
+        TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
     }
 }
 
@@ -32,6 +33,10 @@ struct LinkRegistry<Value> {
         let currentTime = now()
         entries = entries.filter { currentTime - $0.value.storedAt < window }
         entries[Self.key(for: url)] = Entry(value: value, storedAt: currentTime)
+    }
+
+    mutating func removeAll(where shouldRemove: (Value) -> Bool) {
+        entries = entries.filter { !shouldRemove($0.value.value) }
     }
 
     // Two spellings of one link, such as `//Example.com/x` and `https://example.com/x`, share one key.

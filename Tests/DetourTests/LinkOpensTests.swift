@@ -57,6 +57,15 @@ final class LinkOpensTests: XCTestCase {
         XCTAssertTrue(opens.claimCallbackLink(url))
     }
 
+    func testLeavingAppEndsRedeliveryWait() {
+        var opens = makeOpens()
+
+        XCTAssertTrue(opens.claimLaunchLink(url, source: .launchOptions))
+        opens.stopAwaitingRedelivery()
+        clock.advance(by: 4)
+        XCTAssertTrue(opens.claimCallbackLink(url))
+    }
+
     func testSceneLaunchLinkLetsNextTapThrough() {
         var opens = makeOpens()
 

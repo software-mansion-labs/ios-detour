@@ -117,7 +117,7 @@ func scene(
 
 Handle custom scheme and Universal Links that arrive while the app is running:
 
-On cold start iOS passes the launch link to `resolveInitialLink` and then once more to these callbacks. Detour delivers and counts each link open once, so `processLink` returns a result without a link for the repeat.
+Without scenes, iOS passes the cold-start link to `resolveInitialLink` and then once more to these callbacks. Detour delivers and counts each link open once. For the repeat, `processLink` returns a result with `isAlreadyDelivered` set to `true`: ignore it instead of handling the URL yourself.
 
 <details>
 <summary>Custom scheme</summary>
@@ -234,6 +234,7 @@ public struct DetourConfig {
 public struct DetourResult {
     public let processed: Bool
     public let link: DetourLink?
+    public let isAlreadyDelivered: Bool  // An earlier call already delivered this link open
 
     // Convenience accessors
     public var route: String?
