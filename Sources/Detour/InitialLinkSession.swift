@@ -2,13 +2,10 @@ import Foundation
 
 enum LaunchSource {
     // Without scenes, iOS passes the launch link once more to open url or continueUserActivity.
+    // The SDK delivers it there only, so the app does not get it twice.
     case launchOptions
     // A scene gets its launch link only here, not in scene(_:continue:) or scene(_:openURLContexts:).
     case connectionOptions
-
-    var isRedelivered: Bool {
-        self == .launchOptions
-    }
 }
 
 struct LaunchContext {
@@ -26,7 +23,7 @@ extension LaunchContext {
 
 enum InitialLinkAction: Equatable {
     case open(URL)
-    case awaitContinueCallback
+    case awaitCallback
     case resolveDeferred
     case skip
 }
@@ -59,11 +56,11 @@ struct InitialLinkSession {
         case .notHandled:
             if let url {
                 state = .handled
-                return .open(url)
+                return launch.source == .launchOptions ? .awaitCallback : .open(url)
             }
             if launch.waitsForContinueCallback, mode.handles(.verified) {
                 state = .handled
-                return .awaitContinueCallback
+                return .awaitCallback
             }
             state = launch.source == .launchOptions ? .handledWithoutLaunchLink : .handled
             return .resolveDeferred

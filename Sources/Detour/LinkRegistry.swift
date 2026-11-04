@@ -23,20 +23,15 @@ struct LinkRegistry<Value> {
         self.now = now
     }
 
-    func get(_ url: String) -> (stored: Value, age: TimeInterval)? {
-        guard let entry = entries[Self.key(for: url)] else { return nil }
-        let age = now() - entry.storedAt
-        return age < window ? (entry.value, age) : nil
+    func get(_ url: String) -> Value? {
+        guard let entry = entries[Self.key(for: url)], now() - entry.storedAt < window else { return nil }
+        return entry.value
     }
 
     mutating func set(_ url: String, _ value: Value) {
         let currentTime = now()
         entries = entries.filter { currentTime - $0.value.storedAt < window }
         entries[Self.key(for: url)] = Entry(value: value, storedAt: currentTime)
-    }
-
-    mutating func removeAll(where shouldRemove: (Value) -> Bool) {
-        entries = entries.filter { !shouldRemove($0.value.value) }
     }
 
     // Two spellings of one link, such as `//Example.com/x` and `https://example.com/x`, share one key.

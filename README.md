@@ -71,6 +71,8 @@ Call `resolveInitialLink` once on cold start. It also mounts analytics automatic
 
 AppDelegate:
 
+Without scenes, iOS passes the link that opened the app to `resolveInitialLink` and then once more to the callbacks in step 3. Detour delivers it only there, so the app gets it once. The completion here returns the deferred link. Keep `return true`, or iOS does not call those callbacks.
+
 <details>
 <summary>AppDelegate example</summary>
 
@@ -115,9 +117,7 @@ func scene(
 
 ### 3. Handle runtime links
 
-Handle custom scheme and Universal Links that arrive while the app is running:
-
-Without scenes, iOS passes the cold-start link to `resolveInitialLink` and then once more to these callbacks. Detour counts each link open as one click. The repeat still returns the link, with `isAlreadyDelivered` set to `true`: skip it if you already navigated from the earlier result.
+Handle custom scheme and Universal Links that arrive while the app is running. Without scenes, these callbacks also get the link that opened the app, so they are required.
 
 <details>
 <summary>Custom scheme</summary>
@@ -234,7 +234,6 @@ public struct DetourConfig {
 public struct DetourResult {
     public let processed: Bool
     public let link: DetourLink?
-    public let isAlreadyDelivered: Bool  // An earlier call already returned this link open
 
     // Convenience accessors
     public var route: String?

@@ -7,21 +7,10 @@ public class Detour {
     public static let shared = Detour()
 
     private var session = InitialLinkSession()
-    private var linkOpens = LinkOpens()
     private var universalLinkClicks = UniversalLinkClickRecorder()
     private let tag = "Detour"
 
-    private init() {
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: nil
-        ) { _ in
-            Task { @MainActor in
-                self.linkOpens.stopAwaitingRedelivery()
-            }
-        }
-    }
+    private init() {} // Private init to force use of 'shared'
 
     public func mountAnalytics(config: DetourConfig) {
         DetourAnalytics.mount(config: config)
@@ -40,9 +29,8 @@ public class Detour {
         }
     }
 
-    // Tests pass their own clock, so time windows can pass without waiting.
-    func resetLinkState(now: @escaping () -> TimeInterval) {
-        linkOpens = LinkOpens(now: now)
+    // Tests pass their own clock, so the click window can pass without waiting.
+    func resetClickRecorder(now: @escaping () -> TimeInterval) {
         universalLinkClicks = UniversalLinkClickRecorder(now: now)
     }
 
@@ -201,18 +189,7 @@ public class Detour {
     }
 
     // Processes URL and optionally resolves web short-links when config is provided.
-    // A repeat of a link open still returns the link, because the earlier caller may not have navigated.
-    // It only has isAlreadyDelivered set.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        let isRepeat = !linkOpens.claimCallbackLink(url.absoluteString)
-        if isRepeat {
-            DetourLogger.debug(tag, "Link already delivered for this open")
-        }
-        let result = await openLink(url, config: config)
-        return isRepeat ? result.markedAsAlreadyDelivered() : result
-    }
-
-    private func openLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
         let linkType = LinkUtils.detectLinkType(from: url)
         if let mode = config?.linkProcessingMode, !mode.handles(linkType) {
             DetourLogger.debug(tag, "Link of type \(linkType.rawValue) ignored in mode \(mode.rawValue)")
@@ -230,19 +207,12 @@ public class Detour {
     private func openLaunchLink(
         _ url: URL,
         config: DetourConfig,
-        source: LaunchSource,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         StorageUtils.markFirstEntrance()
-
-        let isRepeat = !linkOpens.claimLaunchLink(url.absoluteString, source: source)
-        if isRepeat {
-            DetourLogger.debug(tag, "Launch link already delivered by processLink")
-        }
-
         Task {
-            let result = await openLink(url, config: config)
-            completion(isRepeat ? result.markedAsAlreadyDelivered() : result)
+            let result = await processLink(url, config: config)
+            completion(result)
         }
     }
 
@@ -294,9 +264,9 @@ public class Detour {
         switch session.action(for: launch, mode: config.linkProcessingMode) {
         case let .open(url):
             DetourLogger.debug(tag, session.isDeferredLinkReplaced ? "Processing scene launch link instead of the deferred link" : "Processing launch link")
-            openLaunchLink(url, config: config, source: launch.source, completion: completion)
-        case .awaitContinueCallback:
-            DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
+            openLaunchLink(url, config: config, completion: completion)
+        case .awaitCallback:
+            DetourLogger.debug(tag, "Launch link arrives in the continue or open url callback")
             StorageUtils.markFirstEntrance()
             completion(.empty())
         case .resolveDeferred:

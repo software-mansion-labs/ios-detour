@@ -4,11 +4,18 @@ import XCTest
 final class InitialLinkSessionTests: XCTestCase {
     private let link = URL(string: "https://example.com/promo/offer")!
 
-    func testLaunchLinkOpensOnce() {
+    func testAppDelegateLaunchLinkIsLeftToCallback() {
         var session = InitialLinkSession()
 
-        XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .all), .open(link))
+        XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .all), .awaitCallback)
         XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .all), .skip)
+    }
+
+    func testSceneLaunchLinkOpensOnce() {
+        var session = InitialLinkSession()
+
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
     }
 
     func testSceneLinkOpensOnceAfterAppDelegateFoundNone() {
@@ -33,7 +40,7 @@ final class InitialLinkSessionTests: XCTestCase {
         var session = InitialLinkSession()
         let launch = LaunchContext(candidateURLs: [nil], hasBrowsingActivity: true, source: .launchOptions)
 
-        XCTAssertEqual(session.action(for: launch, mode: .all), .awaitContinueCallback)
+        XCTAssertEqual(session.action(for: launch, mode: .all), .awaitCallback)
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
     }
 
@@ -54,10 +61,10 @@ final class InitialLinkSessionTests: XCTestCase {
     func testResetStartsNewSession() {
         var session = InitialLinkSession()
 
-        _ = session.action(for: .appDelegate(url: link), mode: .all)
+        _ = session.action(for: .scene(url: link), mode: .all)
         session.reset()
 
-        XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .all), .open(link))
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
     }
 
     func testLaunchContextSkipsInfrastructureURL() {

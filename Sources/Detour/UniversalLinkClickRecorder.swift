@@ -22,7 +22,7 @@ final class UniversalLinkClickRecorder {
     // Calls for the same link within `repeatWindow` make no new request and get the result of the first one.
     func record(config: DetourConfig, url: String) async -> UniversalLinkClickOutcome {
         if let earlier = clicks.get(url) {
-            return await earlier.stored.value
+            return await earlier.value
         }
 
         // Stored before the first await, so a second call for this link waits for the same request.
