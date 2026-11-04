@@ -15,6 +15,7 @@ final class DetourEndpointsTests: XCTestCase {
             .analyticsRetention: "https://godetour.dev/api/analytics/retention",
             .analyticsSession: "https://godetour.dev/api/analytics/session",
             .analyticsConversion: "https://godetour.dev/api/analytics/conversion",
+            .sdkConfig: "https://godetour.dev/api/sdk/config",
         ]
         XCTAssertEqual(Set(expected.keys), Set(DetourEndpoint.allCases))
 
@@ -64,6 +65,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
 
         _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
         _ = await DetourNetwork.sendUniversalLinkClick(config: config, url: "https://app.godetour.link/abc")
+        _ = await SdkNetwork.fetchConfig(config: config, etag: nil)
         let requests: [AnalyticsRequest] = [
             .event(name: "test", data: nil),
             .retention(name: "app_open"),

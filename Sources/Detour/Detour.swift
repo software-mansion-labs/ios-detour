@@ -25,6 +25,8 @@ public class Detour {
             self.config = config
             userIdValidator = config.userIdValidator
             _ = InstallStore.shared.deviceID
+            SdkConfigStore.shared.load(appID: config.appID)
+            refreshSdkConfig(config)
         }
 
         if autoStart {
@@ -44,6 +46,15 @@ public class Detour {
         let waiting = runOnStart
         runOnStart = []
         waiting.forEach { $0() }
+    }
+
+    // Once per launch, so a value changed on the server reaches the app on its next launch.
+    private func refreshSdkConfig(_ config: DetourConfig) {
+        Task {
+            let store = SdkConfigStore.shared
+            let result = await SdkNetwork.fetchConfig(config: config, etag: store.etag)
+            store.apply(result, appID: config.appID)
+        }
     }
 
     private func whenStarted(_ work: @escaping () -> Void) {
