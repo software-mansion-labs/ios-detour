@@ -9,10 +9,12 @@ final class ConsentGateTests: XCTestCase {
     private func decision(
         sinceLaunch: DetourConsent? = nil,
         stored: DetourConsent? = nil,
-        gate: ConsentGateDefault
+        gate: ConsentGateDefault,
+        isEnabled: Bool = true
     ) -> GateDecision {
         ConsentGate.decision(
             for: DetourPurpose.analytics,
+            isEnabled: isEnabled,
             consentPassedThisLaunch: sinceLaunch,
             storedConsent: stored,
             gateDefault: gate
@@ -38,6 +40,10 @@ final class ConsentGateTests: XCTestCase {
     func testStoredGrantDoesNotPassAClosedGateOnItsOwn() {
         XCTAssertEqual(decision(stored: granted, gate: .closed), .wait)
         XCTAssertEqual(decision(stored: granted, gate: .open), .send)
+    }
+
+    func testKillSwitchStopsEvenGrantedPurposes() {
+        XCTAssertEqual(decision(sinceLaunch: granted, gate: .open, isEnabled: false), .drop)
     }
 
     func testNewChoiceOnThisLaunchReplacesTheStoredOne() {

@@ -205,6 +205,12 @@ Detour.shared.setConsent(
 )
 ```
 
+To turn the SDK off for a user, call `setEnabled(false)`. It stays off across launches until `setEnabled(true)`. While off, the SDK sends nothing (analytics, sessions, conversions, consent, deferred link matching); links the user taps are still routed. Withdrawing consent for a purpose stops only that purpose.
+
+```swift
+Detour.shared.setEnabled(false)
+```
+
 ## Analytics
 
 Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:

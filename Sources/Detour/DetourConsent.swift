@@ -53,16 +53,10 @@ extension DetourConsent: Codable {
         case schemaVersion = "schema_version"
     }
 
-    private static let timestampFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let timestamp = try container.decode(String.self, forKey: .timestamp)
-        guard let date = Self.timestampFormatter.date(from: timestamp) else {
+        guard let date = ISOTimestamp.date(from: timestamp) else {
             throw DecodingError.dataCorruptedError(forKey: .timestamp, in: container, debugDescription: "Not an ISO 8601 timestamp")
         }
         self.init(
@@ -78,7 +72,7 @@ extension DetourConsent: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(purposes, forKey: .purposes)
-        try container.encode(Self.timestampFormatter.string(from: timestamp), forKey: .timestamp)
+        try container.encode(ISOTimestamp.string(from: timestamp), forKey: .timestamp)
         try container.encodeIfPresent(consentTextRef, forKey: .consentTextRef)
         try container.encodeIfPresent(schemaVersion, forKey: .schemaVersion)
         try container.encodeIfPresent(region, forKey: .region)

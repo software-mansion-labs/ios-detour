@@ -54,6 +54,28 @@ enum SdkNetwork {
         }
     }
 
+    static func sendKillSwitch(enabled: Bool, at date: Date, config: DetourConfig, deviceID: String) async -> KillSwitchReporter.Outcome {
+        let body: [String: Any] = [
+            "device_id": deviceID,
+            "disabled": !enabled,
+            "timestamp": ISOTimestamp.string(from: date),
+        ]
+        guard DetourEndpoints.url(.sdkDisable, config: config) != nil else { return .stop }
+        // The server stops writing about 28 s after a request starts, so a request given up
+        // after 60 s can no longer land after the next one.
+        guard let status = await post(.sdkDisable, body: body, config: config, timeout: 60) else { return .retry }
+
+        switch status {
+        case 200 ... 299:
+            return .confirmed
+        case 429, 500...:
+            return .retry
+        default:
+            DetourLogger.error(tag, "[Detour:KILL_SWITCH] sdk/disable rejected: \(status); sent again on the next launch.")
+            return .stop
+        }
+    }
+
     /// The response status, or nil when no response arrived.
     static func post(
         _ endpoint: DetourEndpoint,

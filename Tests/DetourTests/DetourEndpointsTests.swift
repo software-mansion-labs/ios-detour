@@ -17,6 +17,7 @@ final class DetourEndpointsTests: XCTestCase {
             .analyticsConversion: "https://godetour.dev/api/analytics/conversion",
             .sdkConfig: "https://godetour.dev/api/sdk/config",
             .sdkConsent: "https://godetour.dev/api/sdk/consent",
+            .sdkDisable: "https://godetour.dev/api/sdk/disable",
         ]
         XCTAssertEqual(Set(expected.keys), Set(DetourEndpoint.allCases))
 
@@ -71,6 +72,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
             DetourConsent(purposes: [DetourPurpose.analytics: true]),
             consentText: nil, config: config, deviceID: "device", userID: nil
         )
+        _ = await SdkNetwork.sendKillSwitch(enabled: false, at: Date(), config: config, deviceID: "device")
         let requests: [AnalyticsRequest] = [
             .event(name: "test", data: nil, at: Date()),
             .retention(name: "app_open", at: Date()),

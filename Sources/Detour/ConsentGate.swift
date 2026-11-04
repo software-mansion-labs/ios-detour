@@ -36,12 +36,13 @@ enum GateDecision: Equatable {
     case drop
 }
 
-/// Decides whether a request for a purpose may leave the device.
+/// Decides whether a request for a purpose may leave the device: the kill switch first, then consent.
 enum ConsentGate {
     @MainActor
     static func decision(for purpose: String) -> GateDecision {
         decision(
             for: purpose,
+            isEnabled: InstallStore.shared.isEnabled,
             consentPassedThisLaunch: ConsentStore.passedThisLaunch,
             storedConsent: ConsentStore.stored,
             gateDefault: SdkConfigStore.shared.current.gateDefault(for: purpose)
@@ -53,10 +54,12 @@ enum ConsentGate {
     // so a grant counts only once the app passes it again on this launch.
     static func decision(
         for purpose: String,
+        isEnabled: Bool,
         consentPassedThisLaunch: DetourConsent?,
         storedConsent: DetourConsent?,
         gateDefault: ConsentGateDefault
     ) -> GateDecision {
+        guard isEnabled else { return .drop }
         if let consent = consentPassedThisLaunch {
             return consent.purposes[purpose] == true ? .send : .drop
         }

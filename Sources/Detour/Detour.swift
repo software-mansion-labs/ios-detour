@@ -11,6 +11,7 @@ public class Detour {
     private var isStarted = false
     private var runOnStart: [() -> Void] = []
     private var consentToSend: (consent: DetourConsent, text: String?)?
+    private var killSwitchReporter: KillSwitchReporter?
     private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
 
@@ -28,6 +29,10 @@ public class Detour {
             _ = InstallStore.shared.deviceID
             SdkConfigStore.shared.load(appID: config.appID)
             refreshSdkConfig(config)
+            killSwitchReporter = KillSwitchReporter(store: .shared) { enabled, date in
+                await SdkNetwork.sendKillSwitch(enabled: enabled, at: date, config: config, deviceID: InstallStore.shared.deviceID)
+            }
+            killSwitchReporter?.sync()
             if let consentToSend {
                 self.consentToSend = nil
                 sendConsent(consentToSend.consent, text: consentToSend.text, config: config)
@@ -55,6 +60,7 @@ public class Detour {
 
     // Once per launch, so a value changed on the server reaches the app on its next launch.
     private func refreshSdkConfig(_ config: DetourConfig) {
+        guard InstallStore.shared.isEnabled else { return }
         Task {
             let store = SdkConfigStore.shared
             let result = await SdkNetwork.fetchConfig(config: config, etag: store.etag)
@@ -84,11 +90,22 @@ public class Detour {
     }
 
     private func sendConsent(_ consent: DetourConsent, text: String?, config: DetourConfig) {
+        guard InstallStore.shared.isEnabled else { return }
         let deviceID = InstallStore.shared.deviceID
         let userID = UserIdStore.current
         Task {
             await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID)
         }
+    }
+
+    /// `false` turns the SDK off for this install, also on later launches, until `setEnabled(true)`.
+    /// While off it sends nothing: no analytics, sessions, conversions, consent or deferred link
+    /// matching. Links the user taps are still routed. The device ID does not change.
+    public func setEnabled(_ enabled: Bool) {
+        guard InstallStore.shared.setEnabled(enabled, at: Date()) else { return }
+        // Drops what waited for consent when the SDK goes off.
+        DetourAnalytics.shared.reevaluateWaiting()
+        killSwitchReporter?.sync()
     }
 
     private func whenStarted(_ work: @escaping () -> Void) {
@@ -272,6 +289,11 @@ public class Detour {
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         markSessionHandled()
+        guard InstallStore.shared.isEnabled else {
+            DetourLogger.debug(tag, "SDK disabled; deferred link matching skipped")
+            completion(.empty())
+            return
+        }
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
@@ -321,7 +343,8 @@ public class Detour {
 
     // Processes URL and optionally resolves web short-links when config is provided.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        if LinkUtils.detectLinkType(from: url) == .verified, let config {
+        // The click is Detour's measurement, not routing, so the kill switch stops it.
+        if LinkUtils.detectLinkType(from: url) == .verified, let config, InstallStore.shared.isEnabled {
             let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
             if !clickResult.allowed {
                 return .empty()
