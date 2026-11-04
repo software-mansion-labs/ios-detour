@@ -1,6 +1,6 @@
 import Foundation
 
-// One tap can reach the SDK more than once. Only the first call delivers the link to the app.
+// One tap can reach the SDK more than once. Every call gets the link, and the later ones are marked as repeats.
 struct LinkOpens {
     // Without scenes, iOS passes the cold-start link in the launch options and then once more to
     // continueUserActivity or open url, after didFinishLaunching returns. A slow launch takes seconds.
@@ -30,7 +30,7 @@ struct LinkOpens {
     }
 
     // A real second tap needs the user to leave the app first, and iOS redelivers the launch link before that.
-    // So after the app leaves the foreground, the launch link must not swallow that tap.
+    // So after the app leaves the foreground, that tap must not be marked as a repeat.
     mutating func stopAwaitingRedelivery() {
         opens.removeAll { $0 == .awaitingRedelivery }
     }

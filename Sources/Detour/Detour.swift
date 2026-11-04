@@ -201,13 +201,15 @@ public class Detour {
     }
 
     // Processes URL and optionally resolves web short-links when config is provided.
-    // When an earlier call already delivered this link open, the result has isAlreadyDelivered set.
+    // A repeat of a link open still returns the link, because the earlier caller may not have navigated.
+    // It only has isAlreadyDelivered set.
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
-        guard linkOpens.claimCallbackLink(url.absoluteString) else {
+        let isRepeat = !linkOpens.claimCallbackLink(url.absoluteString)
+        if isRepeat {
             DetourLogger.debug(tag, "Link already delivered for this open")
-            return .alreadyDelivered()
         }
-        return await openLink(url, config: config)
+        let result = await openLink(url, config: config)
+        return isRepeat ? result.markedAsAlreadyDelivered() : result
     }
 
     private func openLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
@@ -233,15 +235,14 @@ public class Detour {
     ) {
         StorageUtils.markFirstEntrance()
 
-        guard linkOpens.claimLaunchLink(url.absoluteString, source: source) else {
+        let isRepeat = !linkOpens.claimLaunchLink(url.absoluteString, source: source)
+        if isRepeat {
             DetourLogger.debug(tag, "Launch link already delivered by processLink")
-            completion(.alreadyDelivered())
-            return
         }
 
         Task {
             let result = await openLink(url, config: config)
-            completion(result)
+            completion(isRepeat ? result.markedAsAlreadyDelivered() : result)
         }
     }
 
