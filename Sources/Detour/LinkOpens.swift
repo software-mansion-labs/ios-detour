@@ -20,19 +20,18 @@ struct LinkOpens {
         opens = LinkRegistry(window: Self.redeliveryWindow, now: now)
     }
 
-    // For a link from the launch or connection options. False when an app callback delivered it first.
-    mutating func claimLaunchLink(_ url: String, willBeRedelivered: Bool) -> Bool {
+    // False when an app callback delivered this link first.
+    mutating func claimLaunchLink(_ url: String, source: LaunchSource) -> Bool {
         if opens.get(url) != nil {
             return false
         }
-        opens.set(url, willBeRedelivered ? .awaitingRedelivery : .delivered)
+        opens.set(url, source.isRedelivered ? .awaitingRedelivery : .delivered)
         return true
     }
 
-    // For a link that an app callback passes to processLink.
     mutating func claimCallbackLink(_ url: String) -> Bool {
         if let earlier = opens.get(url) {
-            switch earlier.value {
+            switch earlier.stored {
             case .awaitingRedelivery:
                 // iOS sends the launch link once more. Let the next tap on it through.
                 opens.set(url, .delivered)

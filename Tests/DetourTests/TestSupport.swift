@@ -1,4 +1,6 @@
 import Foundation
+import XCTest
+@testable import Detour
 
 // Answers every request made through URLSession.shared, so tests never reach the Detour API.
 final class StubURLProtocol: URLProtocol {
@@ -74,5 +76,38 @@ final class TestClock: @unchecked Sendable {
 
     func advance(by seconds: TimeInterval) {
         now += seconds
+    }
+}
+
+class NetworkStubbedTestCase: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        StubURLProtocol.install()
+    }
+
+    override func tearDown() {
+        StubURLProtocol.reset()
+        super.tearDown()
+    }
+}
+
+enum APIPath {
+    static let universalLinkClick = DetourConstants.universalLinkClickUrl!.path
+    static let matchLink = DetourConstants.apiUrl!.path
+}
+
+extension DetourConfig {
+    static func test(_ mode: LinkProcessingMode = .all) -> DetourConfig {
+        DetourConfig(apiKey: "test-key", appID: "test-app", shouldUseClipboard: false, linkProcessingMode: mode)
+    }
+}
+
+extension LaunchContext {
+    static func appDelegate(url: URL? = nil) -> LaunchContext {
+        LaunchContext(url: url, waitsForContinueCallback: false, source: .launchOptions)
+    }
+
+    static func scene(url: URL? = nil) -> LaunchContext {
+        LaunchContext(url: url, waitsForContinueCallback: false, source: .connectionOptions)
     }
 }

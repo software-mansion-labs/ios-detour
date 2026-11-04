@@ -42,7 +42,7 @@ final class LinkOpensTests: XCTestCase {
     func testRedeliveredLaunchLinkIsSkippedOnce() {
         var opens = makeOpens()
 
-        XCTAssertTrue(opens.claimLaunchLink(url, willBeRedelivered: true))
+        XCTAssertTrue(opens.claimLaunchLink(url, source: .launchOptions))
         clock.advance(by: 5)
         XCTAssertFalse(opens.claimCallbackLink(url))
         clock.advance(by: 1)
@@ -52,7 +52,7 @@ final class LinkOpensTests: XCTestCase {
     func testRedeliveryWaitEnds() {
         var opens = makeOpens()
 
-        XCTAssertTrue(opens.claimLaunchLink(url, willBeRedelivered: true))
+        XCTAssertTrue(opens.claimLaunchLink(url, source: .launchOptions))
         clock.advance(by: LinkOpens.redeliveryWindow)
         XCTAssertTrue(opens.claimCallbackLink(url))
     }
@@ -60,7 +60,7 @@ final class LinkOpensTests: XCTestCase {
     func testSceneLaunchLinkLetsNextTapThrough() {
         var opens = makeOpens()
 
-        XCTAssertTrue(opens.claimLaunchLink(url, willBeRedelivered: false))
+        XCTAssertTrue(opens.claimLaunchLink(url, source: .connectionOptions))
         clock.advance(by: 0.5)
         XCTAssertFalse(opens.claimCallbackLink(url))
         clock.advance(by: 1)
@@ -72,6 +72,6 @@ final class LinkOpensTests: XCTestCase {
 
         XCTAssertTrue(opens.claimCallbackLink(url))
         clock.advance(by: 3)
-        XCTAssertFalse(opens.claimLaunchLink(url, willBeRedelivered: true))
+        XCTAssertFalse(opens.claimLaunchLink(url, source: .launchOptions))
     }
 }

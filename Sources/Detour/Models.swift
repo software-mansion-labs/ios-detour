@@ -102,11 +102,3 @@ public struct DetourResult: Sendable {
         return DetourResult(processed: true, link: nil)
     }
 }
-
-// What resolveInitialLink reads from launchOptions or connectionOptions.
-struct LaunchContext {
-    let url: URL?
-    // Checked only when `url` is nil: the activity has no usable URL, so the continue callback brings the link.
-    let hasBrowsingActivity: Bool
-    let isScene: Bool
-}

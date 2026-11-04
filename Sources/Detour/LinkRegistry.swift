@@ -7,7 +7,6 @@ enum MonotonicClock {
     }
 }
 
-// Remembers one value per link for `window` seconds.
 struct LinkRegistry<Value> {
     private struct Entry {
         let value: Value
@@ -23,15 +22,16 @@ struct LinkRegistry<Value> {
         self.now = now
     }
 
-    mutating func get(_ url: String) -> (value: Value, age: TimeInterval)? {
-        let currentTime = now()
-        entries = entries.filter { currentTime - $0.value.storedAt < window }
+    func get(_ url: String) -> (stored: Value, age: TimeInterval)? {
         guard let entry = entries[Self.key(for: url)] else { return nil }
-        return (entry.value, currentTime - entry.storedAt)
+        let age = now() - entry.storedAt
+        return age < window ? (entry.value, age) : nil
     }
 
     mutating func set(_ url: String, _ value: Value) {
-        entries[Self.key(for: url)] = Entry(value: value, storedAt: now())
+        let currentTime = now()
+        entries = entries.filter { currentTime - $0.value.storedAt < window }
+        entries[Self.key(for: url)] = Entry(value: value, storedAt: currentTime)
     }
 
     // Two spellings of one link, such as `//Example.com/x` and `https://example.com/x`, share one key.

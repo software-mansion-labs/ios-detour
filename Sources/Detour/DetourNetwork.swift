@@ -28,7 +28,17 @@ class DetourNetwork {
     static func matchLink(
         config: DetourConfig,
         fingerprint: ProbabilisticFingerprint,
-        linkType: LinkType = .deferred,
+        linkType: LinkType = .deferred
+    ) async -> DetourResult {
+        await withCheckedContinuation { continuation in
+            requestMatch(config: config, fingerprint: fingerprint, linkType: linkType) { continuation.resume(returning: $0) }
+        }
+    }
+
+    private static func requestMatch(
+        config: DetourConfig,
+        fingerprint: ProbabilisticFingerprint,
+        linkType: LinkType,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
 
@@ -179,104 +189,108 @@ class DetourNetwork {
         }
     }
 
-    // Returns nil when the click was not saved, so it can be sent again.
-    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> UniversalLinkClick? {
-        guard let endpoint = DetourConstants.universalLinkClickUrl else {
-            return nil
+    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> UniversalLinkClickOutcome {
+        guard let request = makeUniversalLinkClickRequest(config: config, url: url, linkId: linkId) else {
+            return clickNotSaved("request could not be built")
         }
 
-        struct Metadata: Encodable {
-            let os_version: String
-            let app_version: String
-            let device_model: String
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            return universalLinkClickOutcome(data: data, response: response, url: url)
+        } catch {
+            return clickNotSaved(error.localizedDescription)
         }
+    }
 
-        struct RequestBody: Encodable {
-            let link_id: String?
-            let url: String
-            let timestamp: Int64
-            let platform: String
-            let params: [String: String]?
-            let metadata: Metadata
-
-            enum CodingKeys: String, CodingKey {
-                case link_id, url, timestamp, platform, params, metadata
-            }
-
-            func encode(to encoder: Encoder) throws {
-                var container = encoder.container(keyedBy: CodingKeys.self)
-                if let id = link_id { try container.encode(id, forKey: .link_id) }
-                try container.encode(url, forKey: .url)
-                try container.encode(timestamp, forKey: .timestamp)
-                try container.encode(platform, forKey: .platform)
-                if let params = params, !params.isEmpty { try container.encode(params, forKey: .params) }
-                try container.encode(metadata, forKey: .metadata)
-            }
-        }
-
-        struct ResponseBody: Decodable {
-            let allowed: Bool?
-            let clickId: String?
-            let error: String?
-            let code: String?
-            let clicksInPeriod: Int?
-            let effectiveLimit: Int?
-            let remainingClicks: Int?
-        }
+    private static func makeUniversalLinkClickRequest(config: DetourConfig, url: String, linkId: String?) -> URLRequest? {
+        guard let endpoint = DetourConstants.universalLinkClickUrl else { return nil }
 
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
-        let osVersionString = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let parsedParams = LinkUtils.parseParams(from: LinkUtils.rawQuery(of: url))
-        let urlParams = parsedParams.isEmpty ? nil : parsedParams
-
-        let requestBody = RequestBody(
+        let requestBody = UniversalLinkClickRequestBody(
             link_id: linkId,
             url: url,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
             platform: "ios",
-            params: urlParams,
-            metadata: Metadata(
-                os_version: osVersionString,
-                app_version: appVersion,
+            params: parsedParams.isEmpty ? nil : parsedParams,
+            metadata: UniversalLinkClickRequestBody.Metadata(
+                os_version: "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)",
+                app_version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
                 device_model: deviceModel()
             )
         )
 
-        guard let body = try? JSONEncoder().encode(requestBody) else {
-            return nil
-        }
+        guard let body = try? JSONEncoder().encode(requestBody) else { return nil }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 5
         applyHeaders(to: &request, config: config)
         request.httpBody = body
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return nil }
-
-            let decoded = try? JSONDecoder().decode(ResponseBody.self, from: data)
-            let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
-
-            if isExplicitDeny {
-                DetourLogger.error(
-                    tag,
-                    "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
-                )
-                return (allowed: false, clickId: nil)
-            }
-
-            if !(200...299).contains(http.statusCode) {
-                DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Universal link click not saved: \(http.statusCode)")
-                return nil
-            }
-
-            return (allowed: true, clickId: decoded?.clickId)
-        } catch {
-            DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Universal link click not saved: \(error.localizedDescription)")
-            return nil
-        }
+        return request
     }
+
+    private static func universalLinkClickOutcome(data: Data, response: URLResponse, url: String) -> UniversalLinkClickOutcome {
+        guard let http = response as? HTTPURLResponse else {
+            return clickNotSaved("response is not HTTP")
+        }
+
+        let decoded = try? JSONDecoder().decode(UniversalLinkClickResponseBody.self, from: data)
+        if decoded?.allowed == false || http.statusCode == 402 {
+            DetourLogger.error(
+                tag,
+                "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
+            )
+            return .denied
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            return clickNotSaved("status \(http.statusCode)")
+        }
+        return .allowed(clickId: decoded?.clickId)
+    }
+
+    private static func clickNotSaved(_ reason: String) -> UniversalLinkClickOutcome {
+        DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Universal link click not saved: \(reason)")
+        return .notSaved
+    }
+}
+
+private struct UniversalLinkClickRequestBody: Encodable {
+    struct Metadata: Encodable {
+        let os_version: String
+        let app_version: String
+        let device_model: String
+    }
+
+    let link_id: String?
+    let url: String
+    let timestamp: Int64
+    let platform: String
+    let params: [String: String]?
+    let metadata: Metadata
+
+    enum CodingKeys: String, CodingKey {
+        case link_id, url, timestamp, platform, params, metadata
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let id = link_id { try container.encode(id, forKey: .link_id) }
+        try container.encode(url, forKey: .url)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(platform, forKey: .platform)
+        if let params = params, !params.isEmpty { try container.encode(params, forKey: .params) }
+        try container.encode(metadata, forKey: .metadata)
+    }
+}
+
+private struct UniversalLinkClickResponseBody: Decodable {
+    let allowed: Bool?
+    let clickId: String?
+    let error: String?
+    let code: String?
+    let clicksInPeriod: Int?
+    let effectiveLimit: Int?
+    let remainingClicks: Int?
 }
