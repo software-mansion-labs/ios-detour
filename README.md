@@ -178,6 +178,20 @@ let config = DetourConfig(
 
 </details>
 
+### Starting after consent
+
+`resolveInitialLink` configures and starts the SDK in one call. If your app collects consent first, split it: `configure` sets the SDK up without sending user data, and `start` begins analytics, sessions and deferred link matching. Links the user taps are routed before `start`; a deferred link is matched and passed to the `resolveInitialLink` completion once `start` runs.
+
+```swift
+Detour.shared.configure(config, autoStart: false)
+Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+    // handle result.link
+}
+
+// after your consent platform has the user's choice
+Detour.shared.start()
+```
+
 ## Analytics
 
 Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:
@@ -245,7 +259,7 @@ public struct DetourConfig {
 }
 ```
 
-`userIdValidator` runs on every `setUserId` call; returning `false` drops the value and clears the stored one. It applies once the config was passed to `resolveInitialLink` or `mountAnalytics`.
+`userIdValidator` runs on every `setUserId` call; returning `false` drops the value and clears the stored one. It applies once the config was passed to `configure`, `resolveInitialLink` or `mountAnalytics`.
 
 `baseURL` points the SDK at another Detour API host, for tests and non-production environments. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseURL` is set, the SDK logs a warning on first use so a test host does not end up in a production build.
 

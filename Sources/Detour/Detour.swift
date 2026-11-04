@@ -7,19 +7,66 @@ public class Detour {
     public static let shared = Detour()
 
     private var isSessionHandled = false
+    private var config: DetourConfig?
+    private var isStarted = false
+    private var runOnStart: [() -> Void] = []
     private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
-    
+
     private init() {} // Private init to force use of 'shared'
 
-    public func mountAnalytics(config: DetourConfig) {
-        userIdValidator = config.userIdValidator
+    /// Sets up the SDK without sending user data. With `autoStart: false` nothing that collects data
+    /// runs until `start()`, so the app can wait for its consent platform first. Routing of links
+    /// the user taps works either way. Only the first config is used.
+    public func configure(_ config: DetourConfig, autoStart: Bool = true) {
+        if self.config != nil {
+            DetourLogger.warn(tag, "[Detour:CONFIG] configure called again; the first config is kept.")
+        } else {
+            self.config = config
+            userIdValidator = config.userIdValidator
+            _ = InstallStore.shared.deviceID
+        }
+
+        if autoStart {
+            start()
+        }
+    }
+
+    /// Starts analytics, sessions and deferred link matching. Call it after `configure`.
+    public func start() {
+        guard let config else {
+            DetourLogger.warn(tag, "[Detour:CONFIG] start called before configure; nothing started.")
+            return
+        }
+
+        isStarted = true
         DetourAnalytics.mount(config: config)
+        let waiting = runOnStart
+        runOnStart = []
+        waiting.forEach { $0() }
+    }
+
+    private func whenStarted(_ work: @escaping () -> Void) {
+        if isStarted {
+            work()
+        } else {
+            runOnStart.append(work)
+        }
+    }
+
+    /// `configure` and `start` in one call, as in SDK 1.x. After `configure(_:autoStart: false)`
+    /// it does not start anything; call `start()` instead.
+    public func mountAnalytics(config: DetourConfig) {
+        if self.config == nil {
+            configure(config)
+        } else if isStarted {
+            start()
+        }
     }
 
     /// Sets the app's own user identifier, sent with every later request. `nil` removes it.
     /// Must not be an e-mail address or a phone number. `DetourConfig.userIdValidator` applies only
-    /// after the config was passed to `resolveInitialLink` or `mountAnalytics`, so call this after them.
+    /// after `configure` (or `resolveInitialLink` / `mountAnalytics`), so call this after it.
     public func setUserId(_ userId: String?) {
         guard let userId else {
             UserIdStore.current = nil
@@ -166,8 +213,20 @@ public class Detour {
             return
         }
 
-        markSessionHandled()
+        // The first-launch flag is stored only when matching runs, so an app closed before
+        // `start()` still matches on its next launch.
+        isSessionHandled = true
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
+        whenStarted { [weak self] in
+            self?.matchDeferredLink(config: config, completion: completion)
+        }
+    }
+
+    private func matchDeferredLink(
+        config: DetourConfig,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        markSessionHandled()
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
