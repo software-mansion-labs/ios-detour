@@ -128,6 +128,8 @@ A SwiftUI `App` has no SceneDelegate, so it cannot use the `connectionOptions` v
 - Forward `.onOpenURL` to `processLink`. SwiftUI passes Universal Links there as a URL, not to `.onContinueUserActivity`.
 - For the deferred link, call `resolveInitialLink(config:launchOptions:)` in an app delegate that you attach with `@UIApplicationDelegateAdaptor`.
 
+For a full app, see [`ExampleUsage/DetourSwiftUIExampleProject`](./ExampleUsage/DetourSwiftUIExampleProject).
+
 <details>
 <summary>SwiftUI example</summary>
 
@@ -367,7 +369,12 @@ public enum LinkProcessingMode: String {
 
 ## Example project
 
-A ready-to-run example with a SceneDelegate, covering deferred links, Universal Links, and custom scheme links, is included at [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject). See the [example setup guide](./ExampleUsage/README.md) for instructions.
+Two ready-to-run examples cover deferred links, Universal Links, and custom scheme links:
+
+- [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject): UIKit with a SceneDelegate
+- [`ExampleUsage/DetourSwiftUIExampleProject`](./ExampleUsage/DetourSwiftUIExampleProject): SwiftUI app lifecycle
+
+See the [example setup guide](./ExampleUsage/README.md) for instructions.
 
 ## Privacy
 
