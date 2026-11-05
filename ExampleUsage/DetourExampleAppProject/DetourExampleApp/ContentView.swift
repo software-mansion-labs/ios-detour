@@ -1,8 +1,14 @@
 import SwiftUI
 import Detour
 
+// The SwiftUI example uses this file too.
 struct ContentView: View {
+    let title: String
     @ObservedObject private var demoState = DetourDemoState.shared
+
+    init(title: String) {
+        self.title = title
+    }
 
     var body: some View {
         Group {
@@ -20,7 +26,7 @@ struct ContentView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Detour ExampleUsage Template")
+                        Text(title)
                             .font(.title)
                             .bold()
 
@@ -79,5 +85,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(title: "Detour Example")
 }

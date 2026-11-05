@@ -34,6 +34,22 @@ public class Detour {
         universalLinkClicks = UniversalLinkClickRecorder(now: now)
     }
 
+    // The test host never becomes active, so tests pass their own wait.
+    var waitUntilAppIsActive: @MainActor () async -> Void = Detour.waitForActiveApp
+
+    // SwiftUI passes the link that opened the app to .onOpenURL around the time the app becomes active, which can be
+    // after the deferred match has finished. Waiting until then lets that link replace the deferred link.
+    private static func waitForActiveApp() async {
+        if UIApplication.shared.applicationState != .active {
+            for await _ in NotificationCenter.default.notifications(named: UIApplication.didBecomeActiveNotification) {
+                break
+            }
+        }
+        // SwiftUI can call .onOpenURL right after didBecomeActive, in the same main queue turn.
+        // This lets the processLink task started there run first.
+        await Task.yield()
+    }
+
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
         guard !mode.handles(.scheme) else { return result }
         guard let link = result.link else { return result }
@@ -147,13 +163,15 @@ public class Detour {
         StorageUtils.markFirstEntrance()
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using probabilistic matching")
+        let matchID = session.startDeferredMatch()
 
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             let result = await DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred)
+            await waitUntilAppIsActive()
 
-            if session.isDeferredLinkReplaced {
-                DetourLogger.debug(tag, "Deferred link dropped, the scene launch link opened instead")
+            if session.finishDeferredMatch(matchID) == .replaced {
+                DetourLogger.debug(tag, "Deferred link dropped, a link opened while it was matched")
                 completion(.empty())
                 return
             }
@@ -194,6 +212,12 @@ public class Detour {
         if let mode = config?.linkProcessingMode, !mode.handles(linkType) {
             DetourLogger.debug(tag, "Link of type \(linkType.rawValue) ignored in mode \(mode.rawValue)")
             return .empty()
+        }
+
+        // On a first launch opened from a link, the app follows that link, so it must not get the deferred link too.
+        // SwiftUI passes the launch link only to .onOpenURL, after resolveInitialLink has started the deferred match.
+        if !LinkUtils.isInfrastructureUrl(url.absoluteString) {
+            session.linkOpened()
         }
 
         // Apps keep working when the click cannot be saved. Limits apply only on an explicit deny.
@@ -263,7 +287,7 @@ public class Detour {
 
         switch session.action(for: launch, mode: config.linkProcessingMode) {
         case let .open(url):
-            DetourLogger.debug(tag, session.isDeferredLinkReplaced ? "Processing scene launch link instead of the deferred link" : "Processing launch link")
+            DetourLogger.debug(tag, "Processing launch link")
             openLaunchLink(url, config: config, completion: completion)
         case .awaitCallback:
             DetourLogger.debug(tag, "Launch link arrives in the continue or open url callback")
