@@ -7,7 +7,7 @@ struct DetourSwiftUIExampleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(title: "Detour SwiftUI Example")
                 // SwiftUI passes custom scheme links and Universal Links here, including the link that opened the app.
                 // It does not pass Universal Links to .onContinueUserActivity.
                 .onOpenURL { url in

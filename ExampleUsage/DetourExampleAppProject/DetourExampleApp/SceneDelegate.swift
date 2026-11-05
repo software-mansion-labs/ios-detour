@@ -24,7 +24,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = UIHostingController(
-            rootView: ContentView()
+            rootView: ContentView(title: "Detour UIKit Example")
         )
         window.makeKeyAndVisible()
         self.window = window

@@ -25,7 +25,7 @@ Both apps use the UIScene lifecycle, which apps built with the iOS 27 SDK need t
 
 ## SwiftUI
 
-A SwiftUI `App` uses scenes without a SceneDelegate, so it has no `connectionOptions`. The `INFOPLIST_KEY_UIApplicationSceneManifest_Generation` build setting adds the scene manifest.
+A SwiftUI `App` uses scenes without a SceneDelegate, so it has no `connectionOptions`. The `INFOPLIST_KEY_UIApplicationSceneManifest_Generation` build setting adds the scene manifest. The project uses `ContentView.swift` and `DetourDemoState.swift` from `DetourExampleAppProject/DetourExampleApp`, so keep both projects together.
 
 | Code                                                               | Links                                                                           |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
