@@ -34,11 +34,13 @@ public class Detour {
         universalLinkClicks = UniversalLinkClickRecorder(now: now)
     }
 
-    // The test host never becomes active, so tests pass their own wait.
-    var waitUntilAppIsActive: @MainActor () async -> Void = Detour.waitForActiveApp
+    // The test host never becomes active, so tests replace the wait.
+    var waitUntilAppIsActive: (@MainActor () async -> Void)?
 
     // SwiftUI passes the link that opened the app to .onOpenURL around the time the app becomes active, which can be
     // after the deferred match has finished. Waiting until then lets that link replace the deferred link.
+    // UIApplication.shared does not exist in app extensions, so neither does resolveInitialLink, which waits here.
+    @available(iOSApplicationExtension, unavailable)
     private static func waitForActiveApp() async {
         if UIApplication.shared.applicationState != .active {
             for await _ in NotificationCenter.default.notifications(named: UIApplication.didBecomeActiveNotification) {
@@ -150,6 +152,7 @@ public class Detour {
         connectionOptions.userActivities.filter { $0.activityType == NSUserActivityTypeBrowsingWeb }
     }
 
+    @available(iOSApplicationExtension, unavailable)
     private func resolveDeferredInitialLink(
         config: DetourConfig,
         completion: @escaping @Sendable (DetourResult) -> Void
@@ -168,7 +171,7 @@ public class Detour {
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             let result = await DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred)
-            await waitUntilAppIsActive()
+            await (waitUntilAppIsActive ?? Detour.waitForActiveApp)()
 
             if session.finishDeferredMatch(matchID) == .replaced {
                 DetourLogger.debug(tag, "Deferred link dropped, a link opened while it was matched")
@@ -250,6 +253,7 @@ public class Detour {
         return DetourResult(processed: true, link: resolvedLink)
     }
     
+    @available(iOSApplicationExtension, unavailable)
     public func resolveInitialLink(
         config: DetourConfig,
         launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
@@ -264,6 +268,7 @@ public class Detour {
         resolveInitialLink(config: config, launch: launch, completion: completion)
     }
 
+    @available(iOSApplicationExtension, unavailable)
     public func resolveInitialLink(
         config: DetourConfig,
         connectionOptions: UIScene.ConnectionOptions,
@@ -278,6 +283,7 @@ public class Detour {
         resolveInitialLink(config: config, launch: launch, completion: completion)
     }
 
+    @available(iOSApplicationExtension, unavailable)
     func resolveInitialLink(
         config: DetourConfig,
         launch: LaunchContext,
