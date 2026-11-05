@@ -71,6 +71,8 @@ Apps built with the iOS 27 SDK must use the UIScene lifecycle. Without it, they 
 
 `resolveInitialLink` also mounts analytics automatically, so no separate `mountAnalytics` call is needed.
 
+On the first launch, Detour matches the deferred link in the background. If a link opens the app while that match still runs, the app gets only that link: the `resolveInitialLink` completion then returns no deferred link.
+
 #### SceneDelegate
 
 Pass links to Detour in three methods:

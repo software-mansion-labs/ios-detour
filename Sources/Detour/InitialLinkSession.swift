@@ -30,53 +30,57 @@ enum InitialLinkAction: Equatable {
 
 // Decides what each resolveInitialLink call does.
 struct InitialLinkSession {
-    private enum State {
-        case notHandled
-        // A scene app gets its launch link only in connectionOptions, so the app delegate finds none.
-        // The first scene call can still open that link in place of the deferred link.
-        case handledWithoutLaunchLink
-        case handled
-        case deferredLinkReplacedByScene
+    private enum DeferredMatch {
+        case notRunning
+        case running
+        // A link opened while the match ran. The app follows that link, so it must not get the deferred link too.
+        case replaced
     }
 
-    private var state = State.notHandled
+    private var isHandled = false
+    private var deferredMatch = DeferredMatch.notRunning
 
     var isDeferredLinkReplaced: Bool {
-        state == .deferredLinkReplacedByScene
+        deferredMatch == .replaced
     }
 
     mutating func reset() {
-        state = .notHandled
+        isHandled = false
+        deferredMatch = .notRunning
     }
 
     mutating func action(for launch: LaunchContext, mode: LinkProcessingMode) -> InitialLinkAction {
         let url = launch.url.flatMap { mode.handles(LinkUtils.detectLinkType(from: $0)) ? $0 : nil }
 
-        switch state {
-        case .notHandled:
-            if let url {
-                state = .handled
-                return launch.source == .launchOptions ? .awaitCallback : .open(url)
-            }
-            if launch.waitsForContinueCallback, mode.handles(.verified) {
-                state = .handled
-                return .awaitCallback
-            }
-            state = launch.source == .launchOptions ? .handledWithoutLaunchLink : .handled
-            return .resolveDeferred
-        case .handledWithoutLaunchLink:
-            guard launch.source == .connectionOptions else { return .skip }
-            guard let url else {
-                state = .handled
-                return .skip
-            }
-            state = .deferredLinkReplacedByScene
-            return .open(url)
-        case .handled, .deferredLinkReplacedByScene:
-            // A later scene, such as a new iPad window or a scene that iOS reconnects after discarding it,
-            // gets its link only in connectionOptions. It opens like a callback link, without deferred matching.
+        guard !isHandled else {
+            // A scene app gets its launch link only in connectionOptions, so an app delegate call before it finds none.
+            // A later scene, such as a new iPad window or a scene that iOS reconnects after discarding it, also
+            // gets its link only there. Both open like a callback link, without deferred matching.
             guard launch.source == .connectionOptions, let url else { return .skip }
             return .open(url)
         }
+
+        isHandled = true
+        if let url {
+            return launch.source == .launchOptions ? .awaitCallback : .open(url)
+        }
+        if launch.waitsForContinueCallback, mode.handles(.verified) {
+            return .awaitCallback
+        }
+        return .resolveDeferred
+    }
+
+    mutating func startDeferredMatch() {
+        deferredMatch = .running
+    }
+
+    mutating func linkOpened() {
+        if deferredMatch == .running {
+            deferredMatch = .replaced
+        }
+    }
+
+    mutating func finishDeferredMatch() {
+        deferredMatch = .notRunning
     }
 }

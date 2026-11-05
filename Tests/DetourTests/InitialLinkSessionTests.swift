@@ -15,25 +15,15 @@ final class InitialLinkSessionTests: XCTestCase {
         var session = InitialLinkSession()
 
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
-        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
-    func testFirstSceneLinkReplacesDeferredLinkAfterAppDelegateFoundNone() {
+    func testSceneLinkOpensAfterAppDelegateFoundNone() {
         var session = InitialLinkSession()
 
         XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .resolveDeferred)
         XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .skip)
-        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
-        XCTAssertTrue(session.isDeferredLinkReplaced)
-    }
-
-    func testLaterSceneLinkKeepsDeferredLinkAfterAppDelegateFoundNone() {
-        var session = InitialLinkSession()
-
-        XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .resolveDeferred)
         XCTAssertEqual(session.action(for: .scene(), mode: .all), .skip)
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
-        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
     func testLaterSceneOpensItsLinkWithoutDeferredMatching() {
@@ -44,7 +34,6 @@ final class InitialLinkSessionTests: XCTestCase {
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
         XCTAssertEqual(session.action(for: .scene(), mode: .all), .skip)
         XCTAssertEqual(session.action(for: .scene(url: schemeLink), mode: .all), .open(schemeLink))
-        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
     func testSceneAfterSceneLaunchLinkOpensItsLink() {
@@ -84,6 +73,26 @@ final class InitialLinkSessionTests: XCTestCase {
         let schemeLink = URL(string: "myapp://product/42")!
 
         XCTAssertEqual(session.action(for: .appDelegate(url: schemeLink), mode: .webOnly), .resolveDeferred)
+    }
+
+    func testLinkOpenedDuringDeferredMatchReplacesDeferredLink() {
+        var session = InitialLinkSession()
+
+        session.startDeferredMatch()
+        session.linkOpened()
+
+        XCTAssertTrue(session.isDeferredLinkReplaced)
+        session.finishDeferredMatch()
+        XCTAssertFalse(session.isDeferredLinkReplaced)
+    }
+
+    func testLinkOpenedOutsideDeferredMatchKeepsDeferredLink() {
+        var session = InitialLinkSession()
+
+        session.linkOpened()
+        session.startDeferredMatch()
+
+        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
     func testResetStartsNewSession() {

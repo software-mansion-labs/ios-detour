@@ -147,13 +147,16 @@ public class Detour {
         StorageUtils.markFirstEntrance()
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using probabilistic matching")
+        session.startDeferredMatch()
 
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             let result = await DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred)
 
-            if session.isDeferredLinkReplaced {
-                DetourLogger.debug(tag, "Deferred link dropped, the scene launch link opened instead")
+            let isReplaced = session.isDeferredLinkReplaced
+            session.finishDeferredMatch()
+            if isReplaced {
+                DetourLogger.debug(tag, "Deferred link dropped, a link opened while it was matched")
                 completion(.empty())
                 return
             }
@@ -194,6 +197,12 @@ public class Detour {
         if let mode = config?.linkProcessingMode, !mode.handles(linkType) {
             DetourLogger.debug(tag, "Link of type \(linkType.rawValue) ignored in mode \(mode.rawValue)")
             return .empty()
+        }
+
+        // On a first launch opened from a link, the app follows that link, so it must not get the deferred link too.
+        // SwiftUI passes the launch link only to .onOpenURL, after resolveInitialLink has started the deferred match.
+        if !LinkUtils.isInfrastructureUrl(url.absoluteString) {
+            session.linkOpened()
         }
 
         // Apps keep working when the click cannot be saved. Limits apply only on an explicit deny.
