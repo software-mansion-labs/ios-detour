@@ -28,25 +28,21 @@ enum InitialLinkAction: Equatable {
     case skip
 }
 
+enum DeferredMatchOutcome: Equatable {
+    case kept
+    // A link opened while the match ran. The app follows that link, so it must not get the deferred link too.
+    case replaced
+}
+
 // Decides what each resolveInitialLink call does.
 struct InitialLinkSession {
-    private enum DeferredMatch {
-        case notRunning
-        case running
-        // A link opened while the match ran. The app follows that link, so it must not get the deferred link too.
-        case replaced
-    }
-
     private var isHandled = false
-    private var deferredMatch = DeferredMatch.notRunning
-
-    var isDeferredLinkReplaced: Bool {
-        deferredMatch == .replaced
-    }
+    // A reset keeps running matches: each one still hands its result to the completion that started it.
+    private var deferredMatches: [Int: DeferredMatchOutcome] = [:]
+    private var lastDeferredMatchID = 0
 
     mutating func reset() {
         isHandled = false
-        deferredMatch = .notRunning
     }
 
     mutating func action(for launch: LaunchContext, mode: LinkProcessingMode) -> InitialLinkAction {
@@ -57,6 +53,9 @@ struct InitialLinkSession {
             // A later scene, such as a new iPad window or a scene that iOS reconnects after discarding it, also
             // gets its link only there. Both open like a callback link, without deferred matching.
             guard launch.source == .connectionOptions, let url else { return .skip }
+            // processLink marks it too, but only in a later task. A deferred match that finishes first would still
+            // hand over its link.
+            linkOpened()
             return .open(url)
         }
 
@@ -70,17 +69,17 @@ struct InitialLinkSession {
         return .resolveDeferred
     }
 
-    mutating func startDeferredMatch() {
-        deferredMatch = .running
+    mutating func startDeferredMatch() -> Int {
+        lastDeferredMatchID += 1
+        deferredMatches[lastDeferredMatchID] = .kept
+        return lastDeferredMatchID
     }
 
     mutating func linkOpened() {
-        if deferredMatch == .running {
-            deferredMatch = .replaced
-        }
+        deferredMatches = deferredMatches.mapValues { _ in .replaced }
     }
 
-    mutating func finishDeferredMatch() {
-        deferredMatch = .notRunning
+    mutating func finishDeferredMatch(_ id: Int) -> DeferredMatchOutcome {
+        deferredMatches.removeValue(forKey: id) ?? .kept
     }
 }

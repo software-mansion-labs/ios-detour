@@ -147,15 +147,13 @@ public class Detour {
         StorageUtils.markFirstEntrance()
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using probabilistic matching")
-        session.startDeferredMatch()
+        let matchID = session.startDeferredMatch()
 
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             let result = await DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred)
 
-            let isReplaced = session.isDeferredLinkReplaced
-            session.finishDeferredMatch()
-            if isReplaced {
+            if session.finishDeferredMatch(matchID) == .replaced {
                 DetourLogger.debug(tag, "Deferred link dropped, a link opened while it was matched")
                 completion(.empty())
                 return
