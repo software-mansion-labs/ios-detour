@@ -11,29 +11,56 @@ final class InitialLinkSessionTests: XCTestCase {
         XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .all), .skip)
     }
 
-    func testSceneLaunchLinkOpensOnce() {
+    func testSceneLaunchLinkOpens() {
         var session = InitialLinkSession()
 
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
-        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
+        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
-    func testSceneLinkOpensOnceAfterAppDelegateFoundNone() {
+    func testFirstSceneLinkReplacesDeferredLinkAfterAppDelegateFoundNone() {
+        var session = InitialLinkSession()
+
+        XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .resolveDeferred)
+        XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .skip)
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
+        XCTAssertTrue(session.isDeferredLinkReplaced)
+    }
+
+    func testLaterSceneLinkKeepsDeferredLinkAfterAppDelegateFoundNone() {
         var session = InitialLinkSession()
 
         XCTAssertEqual(session.action(for: .appDelegate(), mode: .all), .resolveDeferred)
         XCTAssertEqual(session.action(for: .scene(), mode: .all), .skip)
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
-        XCTAssertTrue(session.isDeferredLinkReplaced)
-        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
+        XCTAssertFalse(session.isDeferredLinkReplaced)
     }
 
-    func testSceneOnlySessionSkipsLaterSceneLinks() {
+    func testLaterSceneOpensItsLinkWithoutDeferredMatching() {
         var session = InitialLinkSession()
+        let schemeLink = URL(string: "myapp://product/42")!
 
         XCTAssertEqual(session.action(for: .scene(), mode: .all), .resolveDeferred)
-        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
+        XCTAssertEqual(session.action(for: .scene(), mode: .all), .skip)
+        XCTAssertEqual(session.action(for: .scene(url: schemeLink), mode: .all), .open(schemeLink))
         XCTAssertFalse(session.isDeferredLinkReplaced)
+    }
+
+    func testSceneAfterSceneLaunchLinkOpensItsLink() {
+        var session = InitialLinkSession()
+
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .open(link))
+    }
+
+    func testLaterSceneSkipsLinkTheModeIgnores() {
+        var session = InitialLinkSession()
+        let schemeLink = URL(string: "myapp://product/42")!
+
+        XCTAssertEqual(session.action(for: .scene(), mode: .webOnly), .resolveDeferred)
+        XCTAssertEqual(session.action(for: .scene(url: schemeLink), mode: .webOnly), .skip)
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .deferredOnly), .skip)
     }
 
     func testActivityWithoutURLWaitsForContinueCallback() {
@@ -41,13 +68,14 @@ final class InitialLinkSessionTests: XCTestCase {
         let launch = LaunchContext(candidateURLs: [nil], hasBrowsingActivity: true, source: .launchOptions)
 
         XCTAssertEqual(session.action(for: launch, mode: .all), .awaitCallback)
-        XCTAssertEqual(session.action(for: .scene(url: link), mode: .all), .skip)
+        XCTAssertEqual(session.action(for: launch, mode: .all), .skip)
     }
 
     func testDeferredOnlyIgnoresLaunchLink() {
         var session = InitialLinkSession()
 
         XCTAssertEqual(session.action(for: .appDelegate(url: link), mode: .deferredOnly), .resolveDeferred)
+        XCTAssertEqual(session.action(for: .scene(url: link), mode: .deferredOnly), .skip)
         XCTAssertEqual(session.action(for: .scene(url: link), mode: .deferredOnly), .skip)
     }
 

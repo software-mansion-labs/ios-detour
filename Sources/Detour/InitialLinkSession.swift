@@ -28,12 +28,12 @@ enum InitialLinkAction: Equatable {
     case skip
 }
 
-// Decides what each resolveInitialLink call of one launch does.
+// Decides what each resolveInitialLink call does.
 struct InitialLinkSession {
     private enum State {
         case notHandled
         // A scene app gets its launch link only in connectionOptions, so the app delegate finds none.
-        // The scene call can still open that link.
+        // The first scene call can still open that link in place of the deferred link.
         case handledWithoutLaunchLink
         case handled
         case deferredLinkReplacedByScene
@@ -65,11 +65,18 @@ struct InitialLinkSession {
             state = launch.source == .launchOptions ? .handledWithoutLaunchLink : .handled
             return .resolveDeferred
         case .handledWithoutLaunchLink:
-            guard launch.source == .connectionOptions, let url else { return .skip }
+            guard launch.source == .connectionOptions else { return .skip }
+            guard let url else {
+                state = .handled
+                return .skip
+            }
             state = .deferredLinkReplacedByScene
             return .open(url)
         case .handled, .deferredLinkReplacedByScene:
-            return .skip
+            // A later scene, such as a new iPad window or a scene that iOS reconnects after discarding it,
+            // gets its link only in connectionOptions. It opens like a callback link, without deferred matching.
+            guard launch.source == .connectionOptions, let url else { return .skip }
+            return .open(url)
         }
     }
 }

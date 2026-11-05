@@ -263,7 +263,7 @@ public class Detour {
 
         switch session.action(for: launch, mode: config.linkProcessingMode) {
         case let .open(url):
-            DetourLogger.debug(tag, session.isDeferredLinkReplaced ? "Processing scene launch link instead of the deferred link" : "Processing launch link")
+            DetourLogger.debug(tag, "Processing launch link")
             openLaunchLink(url, config: config, completion: completion)
         case .awaitCallback:
             DetourLogger.debug(tag, "Launch link arrives in the continue or open url callback")
