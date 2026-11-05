@@ -34,6 +34,22 @@ public class Detour {
         universalLinkClicks = UniversalLinkClickRecorder(now: now)
     }
 
+    // The test host never becomes active, so tests pass their own wait.
+    var waitUntilAppIsActive: @MainActor () async -> Void = Detour.waitForActiveApp
+
+    // SwiftUI passes the link that opened the app to .onOpenURL around the time the app becomes active, which can be
+    // after the deferred match has finished. Waiting until then lets that link replace the deferred link.
+    private static func waitForActiveApp() async {
+        if UIApplication.shared.applicationState != .active {
+            for await _ in NotificationCenter.default.notifications(named: UIApplication.didBecomeActiveNotification) {
+                break
+            }
+        }
+        // SwiftUI can call .onOpenURL right after didBecomeActive, in the same main queue turn.
+        // This lets the processLink task started there run first.
+        await Task.yield()
+    }
+
     private func filterNonWebUrlLikeLinks(_ result: DetourResult, mode: LinkProcessingMode) -> DetourResult {
         guard !mode.handles(.scheme) else { return result }
         guard let link = result.link else { return result }
@@ -152,6 +168,7 @@ public class Detour {
         Task {
             let fingerprint = await DeviceUtils.getFingerprint(shouldUseClipboard: config.shouldUseClipboard)
             let result = await DetourNetwork.matchLink(config: config, fingerprint: fingerprint, linkType: .deferred)
+            await waitUntilAppIsActive()
 
             if session.finishDeferredMatch(matchID) == .replaced {
                 DetourLogger.debug(tag, "Deferred link dropped, a link opened while it was matched")
