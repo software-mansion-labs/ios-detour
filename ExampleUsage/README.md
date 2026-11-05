@@ -6,6 +6,14 @@ This example demonstrates all three link types supported by the Detour SDK:
 - **Universal Link** — http/https link handled while the app is installed
 - **Custom scheme link** — e.g. `myapp://product/42`
 
+The app uses the UIScene lifecycle, which apps built with the iOS 27 SDK need to launch on iOS 27. `Info.plist` declares the scene in `UIApplicationSceneManifest`, and `SceneDelegate.swift` passes every link to Detour:
+
+| Method                            | Links                                                          |
+| --------------------------------- | -------------------------------------------------------------- |
+| `scene(_:willConnectTo:options:)` | The link that opened the app, or the deferred link without one |
+| `scene(_:openURLContexts:)`       | Custom scheme links while the app runs                         |
+| `scene(_:continue:)`              | Universal Links while the app runs                             |
+
 ## Prerequisites
 
 You need a Detour account with an app configured. Sign up at [godetour.dev](https://godetour.dev/auth/signup) if you haven't already.
@@ -18,7 +26,7 @@ Open `DetourExampleAppProject/DetourExampleApp.xcodeproj` in Xcode.
 
 ### 2. Replace placeholders
 
-The following placeholders appear in `AppDelegate.swift`, `Info.plist`, and `DetourExampleApp.entitlements`:
+The following placeholders appear in `SceneDelegate.swift`, `Info.plist`, and `DetourExampleApp.entitlements`:
 
 | Placeholder                    | Where to find it                        | Example value              |
 | ------------------------------ | --------------------------------------- | -------------------------- |
