@@ -23,6 +23,17 @@ public enum LinkProcessingMode: String, Sendable {
     case all
     case webOnly = "web-only"
     case deferredOnly = "deferred-only"
+
+    func handles(_ linkType: LinkType) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .webOnly:
+            return linkType != .scheme
+        case .deferredOnly:
+            return linkType == .deferred
+        }
+    }
 }
 
 public enum LinkType: String, Codable, Sendable {

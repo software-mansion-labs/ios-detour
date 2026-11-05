@@ -65,11 +65,114 @@ let config = DetourConfig(
 )
 ```
 
-### 2. Resolve initial link on app launch
+### 2. Handle links
 
-Call `resolveInitialLink` once on cold start. It also mounts analytics automatically, so no separate `mountAnalytics` call is needed.
+Apps built with the iOS 27 SDK must use the UIScene lifecycle. Without it, they do not launch on iOS 27 (see Apple's [TN3187](https://developer.apple.com/documentation/technotes/tn3187-migrating-to-the-uikit-scene-based-life-cycle)). Integrate Detour in your SceneDelegate. If your app uses the SwiftUI app lifecycle, follow [SwiftUI app lifecycle](#swiftui-app-lifecycle). The [AppDelegate](#appdelegate-apps-without-scenes) integration is only for apps without scenes.
 
-AppDelegate:
+`resolveInitialLink` also mounts analytics automatically, so no separate `mountAnalytics` call is needed.
+
+On the first launch, Detour matches the deferred link in the background. If a link opens the app while that match still runs, the app gets only that link: the `resolveInitialLink` completion then returns no deferred link. The completion waits until the app is active, so the link that opened the app has reached `processLink` by then.
+
+#### SceneDelegate
+
+Pass links to Detour in three methods:
+
+- `scene(_:willConnectTo:options:)`: call `resolveInitialLink` with `connectionOptions`. On a cold start, iOS passes the link that opened the app only here, so the completion returns that link. Without one, it returns the deferred link.
+- `scene(_:openURLContexts:)`: custom scheme links that arrive while the app runs.
+- `scene(_:continue:)`: Universal Links that arrive while the app runs.
+
+<details>
+<summary>SceneDelegate example</summary>
+
+```swift
+func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+) {
+    Detour.shared.resolveInitialLink(config: config, connectionOptions: connectionOptions) { result in
+        if let link = result.link {
+            // Navigate to link.route
+        }
+    }
+}
+
+func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url else { return }
+    Task {
+        let result = await Detour.shared.processLink(url, config: config)
+        // handle result.link
+    }
+}
+
+func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+          let url = userActivity.webpageURL else { return }
+    Task {
+        let result = await Detour.shared.processLink(url, config: config)
+        // handle result.link
+    }
+}
+```
+
+</details>
+
+A scene that connects later, such as a new iPad window or a scene that iOS reconnects after discarding it, also gets its link in `connectionOptions`. Call `resolveInitialLink` for every scene: its completion returns that link, without deferred matching.
+
+With scenes, `launchOptions` has no link. If your AppDelegate also calls `resolveInitialLink(config:launchOptions:)`, the SceneDelegate call still opens the launch link.
+
+#### SwiftUI app lifecycle
+
+A SwiftUI `App` has no SceneDelegate, so it cannot use the `connectionOptions` variant. SwiftUI passes custom scheme links and Universal Links, including the link that opened the app, to `.onOpenURL`:
+
+- Forward `.onOpenURL` to `processLink`. SwiftUI passes Universal Links there as a URL, not to `.onContinueUserActivity`.
+- For the deferred link, call `resolveInitialLink(config:launchOptions:)` in an app delegate that you attach with `@UIApplicationDelegateAdaptor`.
+
+For a full app, see [`ExampleUsage/DetourSwiftUIExampleProject`](./ExampleUsage/DetourSwiftUIExampleProject).
+
+<details>
+<summary>SwiftUI example</summary>
+
+```swift
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+            if let link = result.link {
+                // Navigate to the deferred link.route
+            }
+        }
+        return true
+    }
+}
+
+@main
+struct MyApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onOpenURL { url in
+                    Task {
+                        let result = await Detour.shared.processLink(url, config: config)
+                        // handle result.link
+                    }
+                }
+        }
+    }
+}
+```
+
+</details>
+
+#### AppDelegate (apps without scenes)
+
+Use this only if your app has no `UIApplicationSceneManifest` and you build it with an SDK older than iOS 27.
+
+Without scenes, iOS passes the link that opened the app to `resolveInitialLink` and then once more to `application(_:open:options:)` or `application(_:continue:restorationHandler:)`. Detour delivers it only in those callbacks, so the app gets it once. The `resolveInitialLink` completion returns the deferred link. Implement both callbacks and keep `return true`, or iOS does not call them and the link that opened the app is lost.
 
 <details>
 <summary>AppDelegate example</summary>
@@ -89,31 +192,6 @@ func application(
 ```
 
 </details>
-
-SceneDelegate:
-
-<details>
-<summary>SceneDelegate example</summary>
-
-```swift
-func scene(
-    _ scene: UIScene,
-    willConnectTo session: UISceneSession,
-    options connectionOptions: UIScene.ConnectionOptions
-) {
-    Detour.shared.resolveInitialLink(config: config, connectionOptions: connectionOptions) { result in
-        if let link = result.link {
-            // Navigate to link.route
-        }
-    }
-}
-```
-
-</details>
-
-### 3. Handle runtime links
-
-Handle custom scheme and Universal Links that arrive while the app is running:
 
 <details>
 <summary>Custom scheme</summary>
@@ -291,7 +369,12 @@ public enum LinkProcessingMode: String {
 
 ## Example project
 
-A ready-to-run example covering deferred links, Universal Links, and custom scheme links is included at [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject). See the [example setup guide](./ExampleUsage/README.md) for instructions.
+Two ready-to-run examples cover deferred links, Universal Links, and custom scheme links:
+
+- [`ExampleUsage/DetourExampleAppProject`](./ExampleUsage/DetourExampleAppProject): UIKit with a SceneDelegate
+- [`ExampleUsage/DetourSwiftUIExampleProject`](./ExampleUsage/DetourSwiftUIExampleProject): SwiftUI app lifecycle
+
+See the [example setup guide](./ExampleUsage/README.md) for instructions.
 
 ## Privacy
 
