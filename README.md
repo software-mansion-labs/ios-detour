@@ -180,7 +180,7 @@ let config = DetourConfig(
 
 ### Starting after consent
 
-`resolveInitialLink` configures and starts the SDK in one call. If your app collects consent first, split it: `configure` sets the SDK up without sending user data, and `start` begins analytics, sessions and deferred link matching. Links the user taps are routed before `start`; a deferred link is matched and passed to the `resolveInitialLink` completion once `start` runs.
+`resolveInitialLink` configures and starts the SDK in one call. If your app collects consent first, split it: `configure` sets the SDK up, and `start` begins analytics, sessions and deferred link matching. Links the user taps before `start` are routed and counted: the SDK sends the link click (link URL, app version, OS version, device model), because your plan's click limit applies to it. A deferred link is matched and passed to the `resolveInitialLink` completion once `start` runs.
 
 ```swift
 Detour.shared.configure(config, autoStart: false)
@@ -192,7 +192,7 @@ Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) {
 Detour.shared.start()
 ```
 
-To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start` only after it.
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. The call is cheap: without a `timestamp`, a choice the Detour server already has is not sent again. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start` only after it.
 
 ```swift
 Detour.shared.setConsent(

@@ -17,9 +17,11 @@ public class Detour {
 
     private init() {} // Private init to force use of 'shared'
 
-    /// Sets up the SDK without sending user data. With `autoStart: false` nothing that collects data
-    /// runs until `start()`, so the app can wait for its consent platform first. Routing of links
-    /// the user taps works either way. Only the first config is used.
+    /// Sets up the SDK. With `autoStart: false` analytics, sessions and deferred link matching wait
+    /// for `start()`, so the app can wait for its consent platform first. A link the user taps
+    /// before that is still routed and counted: the SDK sends the link click (link URL, app version,
+    /// OS version, device model), because your plan's click limit applies to it.
+    /// Only the first config is used.
     public func configure(_ config: DetourConfig, autoStart: Bool = true) {
         if self.config != nil {
             DetourLogger.warn(tag, "[Detour:CONFIG] configure called again; the first config is kept.")
@@ -73,19 +75,22 @@ public class Detour {
     /// Passes the user's choice from your consent platform. Call it on every launch once the
     /// platform has the choice, not only when it changes: a choice stored on an earlier launch
     /// can stop requests for a purpose, but a grant counts only once passed again on this launch.
+    /// The call is cheap: a choice the Detour server already has, with no `timestamp` of its own,
+    /// is not sent again.
     /// `consentText` is the text the user agreed to, stored once per version on the Detour server.
     public func setConsent(_ consent: DetourConsent, consentText: String? = nil) {
         var consent = consent
         if consent.schemaVersion == nil {
             consent.schemaVersion = SdkConfigStore.shared.current.schemaVersion
         }
-        ConsentStore.record(consent)
+        let toSend = ConsentStore.record(consent, deviceID: InstallStore.shared.deviceID)
         DetourAnalytics.shared.reevaluateWaiting()
 
+        guard let toSend else { return }
         if let config {
-            sendConsent(consent, text: consentText, config: config)
+            sendConsent(toSend, text: consentText, config: config)
         } else {
-            consentToSend = (consent, consentText)
+            consentToSend = (toSend, consentText)
         }
     }
 
@@ -94,7 +99,9 @@ public class Detour {
         let deviceID = InstallStore.shared.deviceID
         let userID = UserIdStore.current
         Task {
-            await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID)
+            if await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID) {
+                ConsentStore.markConfirmed(consent, deviceID: deviceID)
+            }
         }
     }
 

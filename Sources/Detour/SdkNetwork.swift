@@ -35,23 +35,34 @@ enum SdkNetwork {
         }
     }
 
+    /// True when the server confirmed the consent.
     static func sendConsent(
         _ consent: DetourConsent,
         consentText: String?,
         config: DetourConfig,
         deviceID: String,
         userID: String?
-    ) async {
-        guard let consentFields = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(consent)) else { return }
+    ) async -> Bool {
+        guard let body = consentBody(consent, consentText: consentText, deviceID: deviceID, userID: userID) else { return false }
+
+        guard let status = await post(.sdkConsent, body: body, config: config) else { return false }
+        if !(200 ... 299).contains(status) {
+            DetourLogger.warn(tag, "[Detour:CONSENT] sdk/consent send failed: \(status)")
+            return false
+        }
+        return true
+    }
+
+    static func consentBody(_ consent: DetourConsent, consentText: String?, deviceID: String, userID: String?) -> [String: Any]? {
+        guard let consentFields = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(consent)) else { return nil }
 
         var body: [String: Any] = ["device_id": deviceID, "consent": consentFields]
         body["user_id"] = userID
-        body["consent_text"] = consentText
-
-        guard let status = await post(.sdkConsent, body: body, config: config) else { return }
-        if !(200 ... 299).contains(status) {
-            DetourLogger.warn(tag, "[Detour:CONSENT] sdk/consent send failed: \(status)")
+        // The server rejects the whole consent for an empty text.
+        if let consentText, !consentText.isEmpty {
+            body["consent_text"] = consentText
         }
+        return body
     }
 
     static func sendKillSwitch(enabled: Bool, at date: Date, config: DetourConfig, deviceID: String) async -> KillSwitchReporter.Outcome {

@@ -17,8 +17,9 @@ public enum DetourPurpose {
 public struct DetourConsent: Sendable, Equatable {
     /// Purpose ID → granted. A purpose missing from the map is not granted.
     public var purposes: [String: Bool]
-    /// When the user made the choice.
-    public var timestamp: Date
+    /// When the user made the choice. `nil` when your consent platform does not say: the SDK
+    /// then sends the time it first got this choice.
+    public var timestamp: Date?
     /// The version of the consent text the user saw, for example the consent platform's version.
     public var consentTextRef: String?
     /// Version of the purpose list. `nil` uses the version from the Detour server.
@@ -30,7 +31,7 @@ public struct DetourConsent: Sendable, Equatable {
 
     public init(
         purposes: [String: Bool],
-        timestamp: Date = Date(),
+        timestamp: Date? = nil,
         consentTextRef: String? = nil,
         schemaVersion: Int? = nil,
         region: String? = nil,
@@ -42,6 +43,14 @@ public struct DetourConsent: Sendable, Equatable {
         self.schemaVersion = schemaVersion
         self.region = region
         self.source = source
+    }
+
+    func isSameChoice(as other: DetourConsent) -> Bool {
+        var mine = self
+        var theirs = other
+        mine.timestamp = nil
+        theirs.timestamp = nil
+        return mine == theirs
     }
 }
 
@@ -55,9 +64,12 @@ extension DetourConsent: Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let timestamp = try container.decode(String.self, forKey: .timestamp)
-        guard let date = ISOTimestamp.date(from: timestamp) else {
-            throw DecodingError.dataCorruptedError(forKey: .timestamp, in: container, debugDescription: "Not an ISO 8601 timestamp")
+        var date: Date?
+        if let timestamp = try container.decodeIfPresent(String.self, forKey: .timestamp) {
+            guard let parsed = ISOTimestamp.date(from: timestamp) else {
+                throw DecodingError.dataCorruptedError(forKey: .timestamp, in: container, debugDescription: "Not an ISO 8601 timestamp")
+            }
+            date = parsed
         }
         self.init(
             purposes: try container.decode([String: Bool].self, forKey: .purposes),
@@ -72,7 +84,7 @@ extension DetourConsent: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(purposes, forKey: .purposes)
-        try container.encode(ISOTimestamp.string(from: timestamp), forKey: .timestamp)
+        try container.encodeIfPresent(timestamp.map(ISOTimestamp.string(from:)), forKey: .timestamp)
         try container.encodeIfPresent(consentTextRef, forKey: .consentTextRef)
         try container.encodeIfPresent(schemaVersion, forKey: .schemaVersion)
         try container.encodeIfPresent(region, forKey: .region)
