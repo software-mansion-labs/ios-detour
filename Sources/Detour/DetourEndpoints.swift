@@ -6,6 +6,8 @@ enum DetourEndpoint: String, CaseIterable {
     case universalLinkClick = "api/link/universal-link-click"
     case analyticsEvent = "api/analytics/event"
     case analyticsRetention = "api/analytics/retention"
+    case analyticsSession = "api/analytics/session"
+    case analyticsConversion = "api/analytics/conversion"
 }
 
 enum DetourEndpoints {

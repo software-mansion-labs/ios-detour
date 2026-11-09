@@ -9,94 +9,90 @@ enum AnalyticsNetwork {
         return formatter
     }()
 
-    private static func makeTimestamp() -> String {
-        return timestampFormatter.string(from: Date())
+    private static func timestamp(_ date: Date = Date()) -> String {
+        return timestampFormatter.string(from: date)
     }
 
-    private static func baseRequest(
-        url: URL?,
-        config: DetourConfig
-    ) -> URLRequest? {
-        guard let url else { return nil }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
-        request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
-        return request
+    private static func endpoint(of request: AnalyticsRequest) -> DetourEndpoint {
+        switch request {
+        case .event: return .analyticsEvent
+        case .retention: return .analyticsRetention
+        case .session: return .analyticsSession
+        case .conversion: return .analyticsConversion
+        }
     }
 
-    private static func commonBody(eventName: String, deviceID: String, userID: String?) -> [String: Any] {
-        var body: [String: Any] = [
-            "event_name": eventName,
-            "timestamp": makeTimestamp(),
-            "platform": "ios",
-            "device_id": deviceID,
-        ]
+    private static func fields(of request: AnalyticsRequest) -> [String: Any] {
+        switch request {
+        case let .event(name, data):
+            var fields: [String: Any] = ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+            if let data, JSONSerialization.isValidJSONObject(data) {
+                fields["data"] = data
+            }
+            return fields
+        case let .retention(name):
+            return ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+        case let .session(.start(sessionID, at)):
+            return ["type": "start", "session_id": sessionID, "timestamp": timestamp(at)]
+        case let .session(.end(sessionID, at, duration)):
+            return [
+                "type": "end",
+                "session_id": sessionID,
+                "timestamp": timestamp(at),
+                "duration_ms": Int((duration * 1000).rounded()),
+            ]
+        case let .conversion(conversion, at):
+            var fields: [String: Any] = [
+                "name": conversion.name,
+                // NSDecimalNumber keeps the exact amount; a Double would turn 0.001234 into 0.0012339999...
+                "revenue": NSDecimalNumber(decimal: conversion.revenue),
+                "currency": conversion.currency,
+                "revenue_type": conversion.revenueType.rawValue,
+                "timestamp": timestamp(at),
+            ]
+            fields["product_id"] = conversion.productId
+            fields["quantity"] = conversion.quantity
+            fields["transaction_id"] = conversion.transactionId
+            return fields
+        }
+    }
+
+    /// Context, then the request's own fields, which win on a shared name, then the identity.
+    static func body(of request: AnalyticsRequest, deviceID: String, userID: String?) -> [String: Any] {
+        var body = RequestContext.current().dictionary
+        body.merge(fields(of: request)) { _, own in own }
+        body["device_id"] = deviceID
         if let userID {
             body["user_id"] = userID
         }
         return body
     }
 
-    private static func send(
-        config: DetourConfig,
-        url: URL?,
-        eventName: String,
-        deviceID: String,
-        userID: String?,
-        data: [String: Any]?,
-        kind: String
-    ) async {
-        guard var request = baseRequest(url: url, config: config) else { return }
+    static func send(_ request: AnalyticsRequest, config: DetourConfig, deviceID: String, userID: String?) async {
+        let endpoint = endpoint(of: request)
+        guard let url = DetourEndpoints.url(endpoint, config: config) else { return }
 
-        var body = commonBody(eventName: eventName, deviceID: deviceID, userID: userID)
-        if let data, JSONSerialization.isValidJSONObject(data) {
-            body["data"] = data
-        }
-
+        let body = body(of: request, deviceID: deviceID, userID: userID)
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body, options: []) else {
-            DetourLogger.warn(tag, "[Detour:ANALYTICS] Failed to encode \(kind) body.")
+            DetourLogger.warn(tag, "[Detour:ANALYTICS] Failed to encode \(endpoint.rawValue) body.")
             return
         }
 
-        request.httpBody = bodyData
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        DetourNetwork.applyHeaders(to: &urlRequest, config: config)
+        urlRequest.httpBody = bodyData
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: urlRequest)
             guard let httpResponse = response as? HTTPURLResponse else { return }
 
             if !(200 ... 299).contains(httpResponse.statusCode) {
-                DetourLogger.warn(tag, "[Detour:ANALYTICS] \(kind) send failed: \(httpResponse.statusCode)")
+                let detail = DetourNetwork.apiErrorMessage(from: data).map { " - \($0)" } ?? ""
+                DetourLogger.warn(tag, "[Detour:ANALYTICS] \(endpoint.rawValue) send failed: \(httpResponse.statusCode)\(detail)")
             }
         } catch {
-            DetourLogger.warn(tag, "[Detour:ANALYTICS] \(kind) send exception: \(error.localizedDescription)")
+            DetourLogger.warn(tag, "[Detour:ANALYTICS] \(endpoint.rawValue) send exception: \(error.localizedDescription)")
         }
-    }
-
-    static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String, userID: String?) async {
-        await send(
-            config: config,
-            url: DetourEndpoints.url(.analyticsEvent, config: config),
-            eventName: eventName,
-            deviceID: deviceID,
-            userID: userID,
-            data: data,
-            kind: "event"
-        )
-    }
-
-    static func sendRetentionEvent(config: DetourConfig, eventName: String, deviceID: String, userID: String?) async {
-        await send(
-            config: config,
-            url: DetourEndpoints.url(.analyticsRetention, config: config),
-            eventName: eventName,
-            deviceID: deviceID,
-            userID: userID,
-            data: nil,
-            kind: "retention event"
-        )
     }
 }
