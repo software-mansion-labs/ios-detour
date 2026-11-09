@@ -8,6 +8,7 @@ public final class DetourAnalytics {
     private var isMounted = false
     private var subscriptionToken: UUID?
     private var hasLoggedColdStartRetention = false
+    private var revenueWarnings = RevenueWarnings()
 
     private init() {}
 
@@ -89,10 +90,10 @@ public final class DetourAnalytics {
     }
 
     public func logEvent(_ eventName: String, data: [String: Any]? = nil) {
-        if eventName == DetourEventName.purchase.rawValue, data?["revenue"] != nil {
+        if revenueWarnings.shouldWarn(eventName: eventName, data: data) {
             DetourLogger.warn(
                 "DetourAnalytics",
-                "[Detour:DEPRECATION] Revenue in logEvent(.purchase) is deprecated and not counted as revenue. Use logConversion instead."
+                "[Detour:DEPRECATION] Revenue in logEvent('\(eventName)') is not counted as revenue. Use DetourAnalytics.logConversion instead."
             )
         }
         AnalyticsEmitter.shared.emit(.event(name: eventName, data: data))
@@ -103,7 +104,21 @@ public final class DetourAnalytics {
     }
 
     public func logConversion(_ conversion: DetourConversion) {
+        if let error = conversion.validationError {
+            DetourLogger.warn("DetourAnalytics", "[Detour:ANALYTICS] logConversion dropped: \(error)")
+            return
+        }
         AnalyticsEmitter.shared.emit(.conversion(conversion, at: Date()))
+    }
+}
+
+/// Warns once per event name per launch, so an event logged often (e.g. `ad_impression`) does not flood the log.
+struct RevenueWarnings {
+    private var warnedEventNames: Set<String> = []
+
+    mutating func shouldWarn(eventName: String, data: [String: Any]?) -> Bool {
+        guard data?["revenue"] != nil else { return false }
+        return warnedEventNames.insert(eventName).inserted
     }
 }
 

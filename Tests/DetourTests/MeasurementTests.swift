@@ -115,3 +115,63 @@ final class ConversionBodyTests: XCTestCase {
         XCTAssertNil(body["quantity"])
     }
 }
+
+final class ConversionValidationTests: XCTestCase {
+    private func conversion(
+        name: String = "purchase",
+        revenue: Decimal = Decimal(string: "4.99")!,
+        currency: String = "usd",
+        productId: String? = "coins_500",
+        quantity: Int? = 1,
+        transactionId: String? = "t_1"
+    ) -> DetourConversion {
+        DetourConversion(
+            name: name, revenue: revenue, currency: currency, revenueType: .iap,
+            productId: productId, quantity: quantity, transactionId: transactionId
+        )
+    }
+
+    func testAcceptsAValidConversion() {
+        XCTAssertNil(conversion().validationError)
+        XCTAssertNil(conversion(revenue: 0, productId: nil, quantity: nil, transactionId: nil).validationError)
+        XCTAssertNil(conversion(revenue: Decimal(string: "999999999999.99")!, quantity: Int(Int32.max)).validationError)
+    }
+
+    func testRejectsEachFieldOutsideTheBackendRules() {
+        XCTAssertEqual(conversion(name: "").validationError, "name must be 1 to 255 characters long.")
+        // Each emoji is two UTF-16 code units, so 128 of them exceed the limit.
+        XCTAssertNotNil(conversion(name: String(repeating: "😀", count: 128)).validationError)
+        XCTAssertNotNil(conversion(revenue: .nan).validationError)
+        XCTAssertNotNil(conversion(revenue: -1).validationError)
+        XCTAssertNotNil(conversion(revenue: 1_000_000_000_000).validationError)
+        XCTAssertEqual(conversion(currency: "US").validationError, "currency must be a three-letter ISO 4217 code.")
+        XCTAssertNotNil(conversion(currency: "U$D").validationError)
+        XCTAssertNotNil(conversion(currency: "ŁÓD").validationError)
+        XCTAssertNotNil(conversion(quantity: -1).validationError)
+        XCTAssertNotNil(conversion(quantity: Int(Int32.max) + 1).validationError)
+        XCTAssertNotNil(conversion(productId: String(repeating: "a", count: 256)).validationError)
+        XCTAssertEqual(conversion(transactionId: "").validationError, "transactionId must be 1 to 255 characters long.")
+    }
+
+    @MainActor
+    func testInvalidConversionIsNotEmitted() {
+        var sent: [AnalyticsRequest] = []
+        let token = AnalyticsEmitter.shared.subscribe { sent.append($0) }
+        defer { AnalyticsEmitter.shared.unsubscribe(token) }
+
+        DetourAnalytics.logConversion(conversion(currency: "dollars"))
+
+        XCTAssertTrue(sent.isEmpty)
+    }
+}
+
+final class RevenueWarningsTests: XCTestCase {
+    func testWarnsOncePerEventNameThatCarriesRevenue() {
+        var warnings = RevenueWarnings()
+
+        XCTAssertFalse(warnings.shouldWarn(eventName: "ad_impression", data: ["placement": "home"]))
+        XCTAssertTrue(warnings.shouldWarn(eventName: "ad_impression", data: ["revenue": 0.01]))
+        XCTAssertFalse(warnings.shouldWarn(eventName: "ad_impression", data: ["revenue": 0.02]))
+        XCTAssertTrue(warnings.shouldWarn(eventName: "purchase", data: ["revenue": 4.99]))
+    }
+}

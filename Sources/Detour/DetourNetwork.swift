@@ -26,6 +26,30 @@ class DetourNetwork {
         }
     }
 
+    /// The `error` and `code` of an API error body `{ "error": ..., "code": ... }`, or `nil` when it has none.
+    static func apiErrorMessage(from data: Data?) -> String? {
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errorContent = json["error"]
+        else { return nil }
+
+        var message: String
+        if let text = errorContent as? String {
+            message = text
+        } else if let bytes = try? JSONSerialization.data(withJSONObject: errorContent),
+                  let text = String(data: bytes, encoding: .utf8)
+        {
+            message = text
+        } else {
+            return nil
+        }
+        if let code = json["code"] as? String {
+            message += " (code: \(code))"
+        }
+        // Validation errors can list every field; a long body would bury the rest of the log.
+        return message.count > 300 ? String(message.prefix(300)) + "..." : message
+    }
+
     static func matchLink(
         config: DetourConfig,
         request matchRequest: SignalMatchRequest,
@@ -84,22 +108,7 @@ class DetourNetwork {
         }
 
         if !(200 ... 299).contains(httpResponse.statusCode) {
-            var errorMessage = "Request failed"
-
-            if let errorData = data,
-               let json = try? JSONSerialization.jsonObject(with: errorData) as? [String: Any],
-               let errorContent = json["error"]
-            {
-                if let strError = errorContent as? String {
-                    errorMessage = strError
-                } else if let errorBytes = try? JSONSerialization.data(withJSONObject: errorContent),
-                          let strified = String(data: errorBytes, encoding: .utf8)
-                {
-                    errorMessage = strified
-                }
-            }
-
-            logAndFail("Server Error: \(errorMessage)", completion: completion)
+            logAndFail("Server Error: \(apiErrorMessage(from: data) ?? "Request failed")", completion: completion)
             return
         }
 
