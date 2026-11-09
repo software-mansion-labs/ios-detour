@@ -7,8 +7,9 @@ public struct DetourConfig: Sendable {
     public let linkProcessingMode: LinkProcessingMode
     /// Detour API host for tests and non-production environments. `nil` uses the production Detour API.
     public let baseURL: URL?
-    /// Called on `Detour.shared.setUserId`; returning `false` drops the value. Use it to reject values
-    /// that must not leave the device, such as e-mail addresses or phone numbers.
+    /// Checks every `Detour.shared.setUserId` value and the stored one once the config is passed to
+    /// `resolveInitialLink` or `mountAnalytics`; returning `false` drops the value and clears the stored one.
+    /// Use it to reject values that must not leave the device, such as e-mail addresses or phone numbers.
     public let userIdValidator: (@Sendable (String) -> Bool)?
 
     public init(

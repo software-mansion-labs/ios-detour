@@ -201,7 +201,7 @@ Detour.shared.mountAnalytics(config: config)
 Detour.shared.unmountAnalytics()
 ```
 
-To link events to your own user account, pass your user identifier after the user signs in, and `nil` after sign-out. Do not pass an e-mail address or a phone number.
+To link events to your own user account, pass your user identifier after the user signs in, and `nil` after sign-out. A stable account ID: the same for the user on every install, never a guest or anonymous ID. Do not pass an e-mail address or a phone number. A value that is empty or longer than 256 characters (UTF-16 code units) is dropped and clears the stored one.
 
 ```swift
 Detour.shared.setUserId("u_12345")
@@ -229,7 +229,7 @@ public struct DetourConfig {
 }
 ```
 
-`userIdValidator` runs on every `setUserId` call; returning `false` drops the value and clears the stored one. It applies once the config was passed to `resolveInitialLink` or `mountAnalytics`.
+`userIdValidator` checks every `setUserId` value and the stored one once the config is passed to `resolveInitialLink` or `mountAnalytics`; returning `false` drops the value and clears the stored one.
 
 `baseURL` points the SDK at another Detour API host, for tests and non-production environments. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseURL` is set, the SDK logs a warning on first use so a test host does not end up in a production build.
 
