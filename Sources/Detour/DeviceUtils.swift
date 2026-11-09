@@ -61,7 +61,11 @@ class DeviceUtils {
     }
 
     @MainActor
-    static func collectSignals(shouldUseClipboard: Bool) async -> SignalMatchRequest {
+    static func collectSignals(
+        shouldUseClipboard: Bool,
+        deviceID: String,
+        userID: String?
+    ) async -> SignalMatchRequest {
         let device = UIDevice.current
         let screen = UIScreen.main
 
@@ -73,7 +77,7 @@ class DeviceUtils {
 
         return SignalMatchRequest(
             platform: "ios",
-            model: device.model,
+            model: DetourNetwork.deviceModel(),
             manufacturer: "Apple",
             systemVersion: device.systemVersion,
             screenWidth: Double(screen.bounds.width),
@@ -83,7 +87,9 @@ class DeviceUtils {
             timezone: TimeZone.current.identifier,
             userAgent: userAgent,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
-            pastedLink: pastedLink
+            pastedLink: pastedLink,
+            deviceID: deviceID,
+            userID: userID
         )
     }
 }

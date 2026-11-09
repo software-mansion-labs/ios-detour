@@ -28,13 +28,17 @@ enum AnalyticsNetwork {
         return request
     }
 
-    private static func commonBody(eventName: String, deviceID: String) -> [String: Any] {
-        return [
+    private static func commonBody(eventName: String, deviceID: String, userID: String?) -> [String: Any] {
+        var body: [String: Any] = [
             "event_name": eventName,
             "timestamp": makeTimestamp(),
             "platform": "ios",
             "device_id": deviceID,
         ]
+        if let userID {
+            body["user_id"] = userID
+        }
+        return body
     }
 
     private static func send(
@@ -42,12 +46,13 @@ enum AnalyticsNetwork {
         url: URL?,
         eventName: String,
         deviceID: String,
+        userID: String?,
         data: [String: Any]?,
         kind: String
     ) async {
         guard var request = baseRequest(url: url, config: config) else { return }
 
-        var body = commonBody(eventName: eventName, deviceID: deviceID)
+        var body = commonBody(eventName: eventName, deviceID: deviceID, userID: userID)
         if let data, JSONSerialization.isValidJSONObject(data) {
             body["data"] = data
         }
@@ -71,23 +76,25 @@ enum AnalyticsNetwork {
         }
     }
 
-    static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String) async {
+    static func sendEvent(config: DetourConfig, eventName: String, data: [String: Any]?, deviceID: String, userID: String?) async {
         await send(
             config: config,
             url: DetourEndpoints.url(.analyticsEvent, config: config),
             eventName: eventName,
             deviceID: deviceID,
+            userID: userID,
             data: data,
             kind: "event"
         )
     }
 
-    static func sendRetentionEvent(config: DetourConfig, eventName: String, deviceID: String) async {
+    static func sendRetentionEvent(config: DetourConfig, eventName: String, deviceID: String, userID: String?) async {
         await send(
             config: config,
             url: DetourEndpoints.url(.analyticsRetention, config: config),
             eventName: eventName,
             deviceID: deviceID,
+            userID: userID,
             data: nil,
             kind: "retention event"
         )

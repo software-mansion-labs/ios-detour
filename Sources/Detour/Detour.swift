@@ -7,12 +7,58 @@ public class Detour {
     public static let shared = Detour()
 
     private var isSessionHandled = false
+    private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
     
     private init() {} // Private init to force use of 'shared'
 
     public func mountAnalytics(config: DetourConfig) {
+        userIdValidator = config.userIdValidator
+        // A value set before the config or stored by an earlier app version never met this validator.
+        if let storedUserId = UserIdStore.current, !isUserIdAccepted(storedUserId) {
+            UserIdStore.current = nil
+        }
         DetourAnalytics.mount(config: config)
+    }
+
+    /// Sets the app's own user identifier, sent with every later request. `nil` removes it.
+    /// A stable account ID: the same for the user on every install, never a guest or anonymous ID.
+    /// Must not be an e-mail address or a phone number. A value that is empty, longer than 256
+    /// UTF-16 code units or rejected by `DetourConfig.userIdValidator` is dropped and clears the stored one.
+    /// The validator checks every `setUserId` value and the stored one once the config is passed
+    /// to `resolveInitialLink` or `mountAnalytics`.
+    public func setUserId(_ userId: String?) {
+        guard let userId else {
+            UserIdStore.current = nil
+            return
+        }
+
+        // A rejected value also clears the previous one, so requests never go out
+        // with the identifier of the user the app has just switched away from.
+        guard isUserIdAccepted(userId) else {
+            UserIdStore.current = nil
+            return
+        }
+
+        UserIdStore.current = userId
+    }
+
+    private func isUserIdAccepted(_ userId: String) -> Bool {
+        // The backend rejects the whole request otherwise, and on first launch the deferred link is lost.
+        guard !userId.isEmpty, userId.utf16.count <= 256 else {
+            DetourLogger.warn(tag, "[Detour:IDENTITY] user ID has the wrong format (empty or longer than 256 characters); not stored or sent.")
+            return false
+        }
+        guard UserIdPolicy.isAllowed(userId), userIdValidator?(userId) ?? true else {
+            DetourLogger.warn(tag, "[Detour:IDENTITY] user ID rejected by the validator; not stored or sent.")
+            return false
+        }
+        return true
+    }
+
+    private func markSessionHandled() {
+        InstallStore.shared.markFirstLaunchHandled()
+        isSessionHandled = true
     }
 
     public func unmountAnalytics() {
@@ -23,8 +69,8 @@ public class Detour {
         isSessionHandled = false
         DetourLogger.debug(tag, "Session reset")
         if allowDeferredRetry {
-            StorageUtils.resetFirstEntrance()
-            DetourLogger.debug(tag, "Deferred retry enabled - first entrance flag reset")
+            InstallStore.shared.resetFirstLaunch()
+            DetourLogger.debug(tag, "Deferred retry enabled - first-launch flag reset")
         }
     }
 
@@ -132,20 +178,23 @@ public class Detour {
         config: DetourConfig,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
-        if !StorageUtils.isFirstEntrance() {
+        if !InstallStore.shared.isFirstLaunch {
             DetourLogger.debug(tag, "Not first launch")
             isSessionHandled = true
             completion(.empty())
             return
         }
 
-        StorageUtils.markFirstEntrance()
-        isSessionHandled = true
+        markSessionHandled()
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
-            let matchRequest = await DeviceUtils.collectSignals(shouldUseClipboard: config.shouldUseClipboard)
+            let matchRequest = await DeviceUtils.collectSignals(
+                shouldUseClipboard: config.shouldUseClipboard,
+                deviceID: InstallStore.shared.deviceID,
+                userID: UserIdStore.current
+            )
             DetourNetwork.matchLink(config: config, request: matchRequest, linkType: .deferred) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
@@ -226,8 +275,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing launch URL")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     Task {
                         let result = await processLink(launchURL.absoluteString, config: config)
                         completion(result)
@@ -240,8 +288,7 @@ public class Detour {
                    !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
                 {
                     DetourLogger.debug(tag, "Processing Universal Link")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     Task {
                         let result = await processLink(universalURL, config: config)
                         completion(result)
@@ -251,8 +298,7 @@ public class Detour {
 
                 if !activities.isEmpty {
                     DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
-                    StorageUtils.markFirstEntrance()
-                    isSessionHandled = true
+                    markSessionHandled()
                     // UIApplicationDelegate will invoke continueUserActivity next.
                     returnEmpty()
                     return
@@ -283,8 +329,7 @@ public class Detour {
                !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing launch URL")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 Task {
                     let result = await processLink(openURL.absoluteString, config: config)
                     completion(result)
@@ -297,8 +342,7 @@ public class Detour {
                !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing Universal Link")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 Task {
                     let result = await processLink(universalURL, config: config)
                     completion(result)
@@ -308,8 +352,7 @@ public class Detour {
 
             if !activities.isEmpty {
                 DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
-                StorageUtils.markFirstEntrance()
-                isSessionHandled = true
+                markSessionHandled()
                 returnEmpty()
                 return
             }
