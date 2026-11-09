@@ -90,10 +90,10 @@ final class MatchRequestIdentityTests: XCTestCase {
 
 @MainActor
 final class SetUserIdTests: XCTestCase {
+    // The config is applied once per process, so the tests set the validator directly.
     override func tearDown() async throws {
         UserIdStore.current = nil
-        Detour.shared.mountAnalytics(config: DetourConfig(apiKey: "key", appID: "app"))
-        Detour.shared.unmountAnalytics()
+        Detour.shared.applyUserIdValidator(nil)
     }
 
     func testStoresAndRemovesUserID() {
@@ -105,13 +105,41 @@ final class SetUserIdTests: XCTestCase {
     }
 
     func testRejectedValueIsNotStoredAndClearsThePreviousOne() {
-        Detour.shared.mountAnalytics(config: DetourConfig(
-            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
-        ))
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
         Detour.shared.setUserId("u_12345")
 
         Detour.shared.setUserId("someone@example.com")
 
         XCTAssertNil(UserIdStore.current)
+    }
+
+    func testWrongFormatIsNotStoredAndClearsThePreviousOne() {
+        Detour.shared.setUserId("u_12345")
+        Detour.shared.setUserId("")
+        XCTAssertNil(UserIdStore.current)
+
+        Detour.shared.setUserId(String(repeating: "a", count: 256))
+        XCTAssertEqual(UserIdStore.current?.count, 256)
+
+        // Each emoji is two UTF-16 code units, so 129 of them exceed the limit.
+        Detour.shared.setUserId(String(repeating: "😀", count: 129))
+        XCTAssertNil(UserIdStore.current)
+    }
+
+    func testValidatorClearsAValueStoredBeforeTheConfig() {
+        Detour.shared.setUserId("someone@example.com")
+        XCTAssertEqual(UserIdStore.current, "someone@example.com")
+
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
+
+        XCTAssertNil(UserIdStore.current)
+    }
+
+    func testValidatorKeepsAnAcceptedStoredValue() {
+        Detour.shared.setUserId("u_12345")
+
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
+
+        XCTAssertEqual(UserIdStore.current, "u_12345")
     }
 }

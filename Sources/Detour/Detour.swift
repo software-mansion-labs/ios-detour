@@ -25,7 +25,7 @@ public class Detour {
             DetourLogger.warn(tag, "[Detour:CONFIG] configure called again; the first config is kept.")
         } else {
             self.config = config
-            userIdValidator = config.userIdValidator
+            applyUserIdValidator(config.userIdValidator)
             _ = InstallStore.shared.deviceID
             SdkConfigStore.shared.load(appID: config.appID)
             refreshSdkConfig(config)
@@ -127,8 +127,11 @@ public class Detour {
     }
 
     /// Sets the app's own user identifier, sent with every later request. `nil` removes it.
-    /// Must not be an e-mail address or a phone number. `DetourConfig.userIdValidator` applies only
-    /// after `configure` (or `resolveInitialLink` / `mountAnalytics`), so call this after it.
+    /// A stable account ID: the same for the user on every install, never a guest or anonymous ID.
+    /// Must not be an e-mail address or a phone number. A value that is empty, longer than 256
+    /// UTF-16 code units or rejected by `DetourConfig.userIdValidator` is dropped and clears the stored one.
+    /// The validator checks every `setUserId` value and the stored one once the config is passed
+    /// to `configure` (or `resolveInitialLink` / `mountAnalytics`).
     public func setUserId(_ userId: String?) {
         guard let userId else {
             UserIdStore.current = nil
@@ -137,13 +140,33 @@ public class Detour {
 
         // A rejected value also clears the previous one, so requests never go out
         // with the identifier of the user the app has just switched away from.
-        guard UserIdPolicy.isAllowed(userId), userIdValidator?(userId) ?? true else {
-            DetourLogger.warn(tag, "[Detour:IDENTITY] setUserId value rejected by the validator; not stored or sent.")
+        guard isUserIdAccepted(userId) else {
             UserIdStore.current = nil
             return
         }
 
         UserIdStore.current = userId
+    }
+
+    func applyUserIdValidator(_ validator: (@Sendable (String) -> Bool)?) {
+        userIdValidator = validator
+        // A value set before the config or stored by an earlier app version never met this validator.
+        if let storedUserId = UserIdStore.current, !isUserIdAccepted(storedUserId) {
+            UserIdStore.current = nil
+        }
+    }
+
+    private func isUserIdAccepted(_ userId: String) -> Bool {
+        // The backend rejects the whole request otherwise, and on first launch the deferred link is lost.
+        guard !userId.isEmpty, userId.utf16.count <= 256 else {
+            DetourLogger.warn(tag, "[Detour:IDENTITY] user ID has the wrong format (empty or longer than 256 characters); not stored or sent.")
+            return false
+        }
+        guard UserIdPolicy.isAllowed(userId), userIdValidator?(userId) ?? true else {
+            DetourLogger.warn(tag, "[Detour:IDENTITY] user ID rejected by the validator; not stored or sent.")
+            return false
+        }
+        return true
     }
 
     private func markSessionHandled() {
