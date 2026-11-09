@@ -74,11 +74,12 @@ enum AnalyticsNetwork {
         urlRequest.httpBody = bodyData
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: urlRequest)
+            let (data, response) = try await URLSession.shared.data(for: urlRequest)
             guard let httpResponse = response as? HTTPURLResponse else { return }
 
             if !(200 ... 299).contains(httpResponse.statusCode) {
-                DetourLogger.warn(tag, "[Detour:ANALYTICS] \(endpoint.rawValue) send failed: \(httpResponse.statusCode)")
+                let detail = DetourNetwork.apiErrorMessage(from: data).map { " - \($0)" } ?? ""
+                DetourLogger.warn(tag, "[Detour:ANALYTICS] \(endpoint.rawValue) send failed: \(httpResponse.statusCode)\(detail)")
             }
         } catch {
             DetourLogger.warn(tag, "[Detour:ANALYTICS] \(endpoint.rawValue) send exception: \(error.localizedDescription)")
