@@ -114,4 +114,38 @@ final class SetUserIdTests: XCTestCase {
 
         XCTAssertNil(UserIdStore.current)
     }
+
+    func testWrongFormatIsNotStoredAndClearsThePreviousOne() {
+        Detour.shared.setUserId("u_12345")
+        Detour.shared.setUserId("")
+        XCTAssertNil(UserIdStore.current)
+
+        Detour.shared.setUserId(String(repeating: "a", count: 256))
+        XCTAssertEqual(UserIdStore.current?.count, 256)
+
+        // Each emoji is two UTF-16 code units, so 129 of them exceed the limit.
+        Detour.shared.setUserId(String(repeating: "😀", count: 129))
+        XCTAssertNil(UserIdStore.current)
+    }
+
+    func testValidatorClearsAValueStoredBeforeTheConfig() {
+        Detour.shared.setUserId("someone@example.com")
+        XCTAssertEqual(UserIdStore.current, "someone@example.com")
+
+        Detour.shared.mountAnalytics(config: DetourConfig(
+            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
+        ))
+
+        XCTAssertNil(UserIdStore.current)
+    }
+
+    func testValidatorKeepsAnAcceptedStoredValue() {
+        Detour.shared.setUserId("u_12345")
+
+        Detour.shared.mountAnalytics(config: DetourConfig(
+            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
+        ))
+
+        XCTAssertEqual(UserIdStore.current, "u_12345")
+    }
 }
