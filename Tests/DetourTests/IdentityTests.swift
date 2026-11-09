@@ -90,10 +90,10 @@ final class MatchRequestIdentityTests: XCTestCase {
 
 @MainActor
 final class SetUserIdTests: XCTestCase {
+    // The config is applied once per process, so the tests set the validator directly.
     override func tearDown() async throws {
         UserIdStore.current = nil
-        Detour.shared.mountAnalytics(config: DetourConfig(apiKey: "key", appID: "app"))
-        Detour.shared.unmountAnalytics()
+        Detour.shared.applyUserIdValidator(nil)
     }
 
     func testStoresAndRemovesUserID() {
@@ -105,9 +105,7 @@ final class SetUserIdTests: XCTestCase {
     }
 
     func testRejectedValueIsNotStoredAndClearsThePreviousOne() {
-        Detour.shared.mountAnalytics(config: DetourConfig(
-            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
-        ))
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
         Detour.shared.setUserId("u_12345")
 
         Detour.shared.setUserId("someone@example.com")
@@ -132,9 +130,7 @@ final class SetUserIdTests: XCTestCase {
         Detour.shared.setUserId("someone@example.com")
         XCTAssertEqual(UserIdStore.current, "someone@example.com")
 
-        Detour.shared.mountAnalytics(config: DetourConfig(
-            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
-        ))
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
 
         XCTAssertNil(UserIdStore.current)
     }
@@ -142,9 +138,7 @@ final class SetUserIdTests: XCTestCase {
     func testValidatorKeepsAnAcceptedStoredValue() {
         Detour.shared.setUserId("u_12345")
 
-        Detour.shared.mountAnalytics(config: DetourConfig(
-            apiKey: "key", appID: "app", userIdValidator: { !$0.contains("@") }
-        ))
+        Detour.shared.applyUserIdValidator { !$0.contains("@") }
 
         XCTAssertEqual(UserIdStore.current, "u_12345")
     }

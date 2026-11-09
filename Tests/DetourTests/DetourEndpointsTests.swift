@@ -15,6 +15,9 @@ final class DetourEndpointsTests: XCTestCase {
             .analyticsRetention: "https://godetour.dev/api/analytics/retention",
             .analyticsSession: "https://godetour.dev/api/analytics/session",
             .analyticsConversion: "https://godetour.dev/api/analytics/conversion",
+            .sdkConfig: "https://godetour.dev/api/sdk/config",
+            .sdkConsent: "https://godetour.dev/api/sdk/consent",
+            .sdkDisable: "https://godetour.dev/api/sdk/disable",
         ]
         XCTAssertEqual(Set(expected.keys), Set(DetourEndpoint.allCases))
 
@@ -64,9 +67,15 @@ final class DetourNetworkBaseURLTests: XCTestCase {
 
         _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
         _ = await DetourNetwork.sendUniversalLinkClick(config: config, url: "https://app.godetour.link/abc")
+        _ = await SdkNetwork.fetchConfig(config: config, etag: nil)
+        await SdkNetwork.sendConsent(
+            DetourConsent(purposes: [DetourPurpose.analytics: true]),
+            consentText: nil, config: config, deviceID: "device", userID: nil
+        )
+        _ = await SdkNetwork.sendKillSwitch(enabled: false, at: Date(), config: config, deviceID: "device")
         let requests: [AnalyticsRequest] = [
-            .event(name: "test", data: nil),
-            .retention(name: "app_open"),
+            .event(name: "test", data: nil, at: Date()),
+            .retention(name: "app_open", at: Date()),
             .session(.start(sessionID: "8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", at: Date())),
             .conversion(DetourConversion(name: "purchase", revenue: 4.99, currency: "USD", revenueType: .iap), at: Date()),
         ]
@@ -88,7 +97,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         let config = DetourConfig(apiKey: "key", appID: "app", baseURL: URL(string: "http://api.example.com"))
 
         _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
-        await AnalyticsNetwork.send(.event(name: "test", data: nil), config: config, deviceID: "device", userID: nil)
+        await AnalyticsNetwork.send(.event(name: "test", data: nil, at: Date()), config: config, deviceID: "device", userID: nil)
 
         let matched = expectation(description: "match-link completed")
         DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }

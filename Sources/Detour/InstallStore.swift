@@ -1,6 +1,7 @@
 import Foundation
 
-/// Per-install state that must disappear with the app: the device ID and the first-launch flag.
+/// Per-install state that must disappear with the app: the device ID, the first-launch flag
+/// and the kill switch, which a reinstall keeps or loses together with the device ID.
 /// Kept in a file excluded from backups, so a reinstall or a phone restored from a backup
 /// starts with a new device ID and runs deferred matching again.
 @MainActor
@@ -10,6 +11,25 @@ final class InstallStore {
     private struct State: Codable {
         var deviceID: String
         var firstLaunchHandled: Bool
+        var enabled = true
+        /// The last kill switch state the server confirmed. A new install is enabled there.
+        var reportedEnabled = true
+        var enabledChangedAt: Date?
+
+        init(deviceID: String, firstLaunchHandled: Bool) {
+            self.deviceID = deviceID
+            self.firstLaunchHandled = firstLaunchHandled
+        }
+
+        // A file saved by an SDK without the kill switch must still decode, or the device ID is lost.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            deviceID = try container.decode(String.self, forKey: .deviceID)
+            firstLaunchHandled = try container.decode(Bool.self, forKey: .firstLaunchHandled)
+            enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+            reportedEnabled = try container.decodeIfPresent(Bool.self, forKey: .reportedEnabled) ?? true
+            enabledChangedAt = try container.decodeIfPresent(Date.self, forKey: .enabledChangedAt)
+        }
     }
 
     private enum LegacyKeys {
@@ -40,6 +60,29 @@ final class InstallStore {
 
     func resetFirstLaunch() {
         update { $0.firstLaunchHandled = false }
+    }
+
+    var isEnabled: Bool { load().enabled }
+
+    /// Returns false when the SDK was already in this state.
+    func setEnabled(_ enabled: Bool, at date: Date) -> Bool {
+        guard load().enabled != enabled else { return false }
+        update {
+            $0.enabled = enabled
+            $0.enabledChangedAt = date
+        }
+        return true
+    }
+
+    /// The kill switch state the server has not confirmed yet.
+    var unreportedKillSwitch: (enabled: Bool, at: Date)? {
+        let state = load()
+        guard state.enabled != state.reportedEnabled else { return nil }
+        return (state.enabled, state.enabledChangedAt ?? Date())
+    }
+
+    func markKillSwitchReported(enabled: Bool) {
+        update { $0.reportedEnabled = enabled }
     }
 
     private func update(_ change: (inout State) -> Void) {
@@ -77,7 +120,9 @@ final class InstallStore {
             DetourLogger.warn(tag, "[Detour:STORAGE] Install state file is unreadable; starting a new install.")
             return nil
         }
-        return State(deviceID: saved.deviceID.lowercased(), firstLaunchHandled: saved.firstLaunchHandled)
+        var normalized = saved
+        normalized.deviceID = saved.deviceID.lowercased()
+        return normalized
     }
 
     private func legacyState() -> State? {

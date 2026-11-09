@@ -3,16 +3,6 @@ import Foundation
 enum AnalyticsNetwork {
     private static let tag = "AnalyticsApiClient"
 
-    private static let timestampFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static func timestamp(_ date: Date = Date()) -> String {
-        return timestampFormatter.string(from: date)
-    }
-
     private static func endpoint(of request: AnalyticsRequest) -> DetourEndpoint {
         switch request {
         case .event: return .analyticsEvent
@@ -24,21 +14,21 @@ enum AnalyticsNetwork {
 
     private static func fields(of request: AnalyticsRequest) -> [String: Any] {
         switch request {
-        case let .event(name, data):
-            var fields: [String: Any] = ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+        case let .event(name, data, at):
+            var fields: [String: Any] = ["event_name": name, "timestamp": ISOTimestamp.string(from: at), "platform": "ios"]
             if let data, JSONSerialization.isValidJSONObject(data) {
                 fields["data"] = data
             }
             return fields
-        case let .retention(name):
-            return ["event_name": name, "timestamp": timestamp(), "platform": "ios"]
+        case let .retention(name, at):
+            return ["event_name": name, "timestamp": ISOTimestamp.string(from: at), "platform": "ios"]
         case let .session(.start(sessionID, at)):
-            return ["type": "start", "session_id": sessionID, "timestamp": timestamp(at)]
+            return ["type": "start", "session_id": sessionID, "timestamp": ISOTimestamp.string(from: at)]
         case let .session(.end(sessionID, at, duration)):
             return [
                 "type": "end",
                 "session_id": sessionID,
-                "timestamp": timestamp(at),
+                "timestamp": ISOTimestamp.string(from: at),
                 "duration_ms": Int((duration * 1000).rounded()),
             ]
         case let .conversion(conversion, at):
@@ -48,7 +38,7 @@ enum AnalyticsNetwork {
                 "revenue": NSDecimalNumber(decimal: conversion.revenue),
                 "currency": conversion.currency,
                 "revenue_type": conversion.revenueType.rawValue,
-                "timestamp": timestamp(at),
+                "timestamp": ISOTimestamp.string(from: at),
             ]
             fields["product_id"] = conversion.productId
             fields["quantity"] = conversion.quantity

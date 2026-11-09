@@ -178,6 +178,39 @@ let config = DetourConfig(
 
 </details>
 
+### Starting after consent
+
+`resolveInitialLink` configures and starts the SDK in one call. If your app collects consent first, split it: `configure` sets the SDK up, and `start` begins analytics, sessions and deferred link matching. Links the user taps before `start` are routed and counted: the SDK sends the link click (link URL, app version, OS version, device model), because your plan's click limit applies to it. A deferred link is matched and passed to the `resolveInitialLink` completion once `start` runs.
+
+```swift
+Detour.shared.configure(config, autoStart: false)
+Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+    // handle result.link
+}
+
+// after your consent platform has the user's choice
+Detour.shared.start()
+```
+
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. The call is cheap: without a `timestamp`, a choice the Detour server already has is not sent again. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start` only after it.
+
+```swift
+Detour.shared.setConsent(
+    DetourConsent(
+        purposes: [DetourPurpose.analytics: true, DetourPurpose.adNetworkSharing: false],
+        consentTextRef: "cmp-v12",
+        source: "cmp"
+    ),
+    consentText: noticeText
+)
+```
+
+To turn the SDK off for a user, call `setEnabled(false)`. It stays off across launches until `setEnabled(true)`. While off, the SDK sends nothing (analytics, sessions, conversions, consent, deferred link matching); links the user taps are still routed. Withdrawing consent for a purpose stops only that purpose.
+
+```swift
+Detour.shared.setEnabled(false)
+```
+
 ## Analytics
 
 Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:
@@ -245,7 +278,7 @@ public struct DetourConfig {
 }
 ```
 
-`userIdValidator` checks every `setUserId` value and the stored one once the config is passed to `resolveInitialLink` or `mountAnalytics`; returning `false` drops the value and clears the stored one.
+`userIdValidator` checks every `setUserId` value and the stored one once the config is passed to `configure`, `resolveInitialLink` or `mountAnalytics`; returning `false` drops the value and clears the stored one.
 
 `baseURL` points the SDK at another Detour API host, for tests and non-production environments. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseURL` is set, the SDK logs a warning on first use so a test host does not end up in a production build.
 

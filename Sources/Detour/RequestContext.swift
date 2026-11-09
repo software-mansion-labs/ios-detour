@@ -12,6 +12,7 @@ struct RequestContext: Encodable {
     var locale: String?
     var sessionID: String?
     var attStatus: String?
+    var consentSnapshot: DetourConsent?
 
     enum CodingKeys: String, CodingKey {
         case appVersion = "app_version"
@@ -22,6 +23,7 @@ struct RequestContext: Encodable {
         case locale
         case sessionID = "session_id"
         case attStatus = "att_status"
+        case consentSnapshot = "consent_snapshot"
     }
 
     static func current() -> RequestContext {
@@ -34,7 +36,8 @@ struct RequestContext: Encodable {
             networkType: NetworkTypeMonitor.shared.currentType,
             locale: Locale.preferredLanguages.first,
             sessionID: SessionManager.shared.currentSessionID,
-            attStatus: attStatus()
+            attStatus: attStatus(),
+            consentSnapshot: ConsentStore.passedThisLaunch
         )
     }
 

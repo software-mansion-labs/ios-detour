@@ -6,9 +6,15 @@ public final class DetourAnalytics {
     public static let shared = DetourAnalytics()
 
     private var isMounted = false
+    private var config: DetourConfig?
     private var subscriptionToken: UUID?
     private var hasLoggedColdStartRetention = false
     private var revenueWarnings = RevenueWarnings()
+    private var waitingForConsent: [AnalyticsRequest] = []
+
+    // PROVISIONAL: kept in memory and capped, so a closed gate the app never answers
+    // cannot grow without bound. The oldest requests (app_open, the session start) are kept.
+    private static let maxWaitingForConsent = 100
 
     private init() {}
 
@@ -39,19 +45,14 @@ public final class DetourAnalytics {
     public func mount(config: DetourConfig) {
         guard !isMounted else { return }
         isMounted = true
+        self.config = config
 
         subscriptionToken = AnalyticsEmitter.shared.subscribe { [weak self] payload in
-            guard self != nil else { return }
-            Task {
-                await AnalyticsNetwork.send(
-                    payload,
-                    config: config,
-                    deviceID: InstallStore.shared.deviceID,
-                    userID: UserIdStore.current
-                )
-            }
+            self?.deliver(payload)
         }
-        Self.startSessions(config: config)
+        SessionManager.shared.start { [weak self] event in
+            Task { @MainActor in self?.deliver(.session(event)) }
+        }
 
         if !hasLoggedColdStartRetention {
             logRetention("app_open")
@@ -59,30 +60,51 @@ public final class DetourAnalytics {
         }
     }
 
-    private static func startSessions(config: DetourConfig) {
-        SessionManager.shared.start { event in
-            Task { @MainActor in
-                // The end goes out as the app moves to the background, so ask iOS for time to send it.
-                let backgroundTask = BackgroundTask(name: "DetourSession")
-                await AnalyticsNetwork.send(
-                    .session(event),
-                    config: config,
-                    deviceID: InstallStore.shared.deviceID,
-                    userID: UserIdStore.current
-                )
-                backgroundTask.end()
-            }
-        }
-    }
-
     public func unmount() {
         guard isMounted else { return }
         isMounted = false
         SessionManager.shared.stop()
+        waitingForConsent = []
 
         guard let token = subscriptionToken else { return }
         subscriptionToken = nil
         AnalyticsEmitter.shared.unsubscribe(token)
+    }
+
+    /// Sends the requests that waited for consent once a new consent or config decides them.
+    func reevaluateWaiting() {
+        let waiting = waitingForConsent
+        waitingForConsent = []
+        waiting.forEach(deliver)
+    }
+
+    private func deliver(_ request: AnalyticsRequest) {
+        switch ConsentGate.decision(for: DetourPurpose.analytics) {
+        case .send:
+            send(request)
+        case .wait:
+            if waitingForConsent.count < Self.maxWaitingForConsent {
+                waitingForConsent.append(request)
+            }
+        case .drop:
+            break
+        }
+    }
+
+    private func send(_ request: AnalyticsRequest) {
+        guard let config else { return }
+        // Requests also start as the app moves to the background (a session end, an event logged
+        // on exit), so ask iOS for time to finish them.
+        let backgroundTask = BackgroundTask(name: "DetourAnalytics")
+        Task {
+            await AnalyticsNetwork.send(
+                request,
+                config: config,
+                deviceID: InstallStore.shared.deviceID,
+                userID: UserIdStore.current
+            )
+            backgroundTask.end()
+        }
     }
 
     public func logEvent(_ eventName: DetourEventName, data: [String: Any]? = nil) {
@@ -96,11 +118,11 @@ public final class DetourAnalytics {
                 "[Detour:DEPRECATION] Revenue in logEvent('\(eventName)') is not counted as revenue. Use DetourAnalytics.logConversion instead."
             )
         }
-        AnalyticsEmitter.shared.emit(.event(name: eventName, data: data))
+        AnalyticsEmitter.shared.emit(.event(name: eventName, data: data, at: Date()))
     }
 
     public func logRetention(_ eventName: String) {
-        AnalyticsEmitter.shared.emit(.retention(name: eventName))
+        AnalyticsEmitter.shared.emit(.retention(name: eventName, at: Date()))
     }
 
     public func logConversion(_ conversion: DetourConversion) {
