@@ -65,14 +65,14 @@ final class DetourNetworkBaseURLTests: XCTestCase {
     func testAllRequestsGoToConfiguredHost() async {
         let config = DetourConfig(apiKey: "key", appID: "app", baseURL: URL(string: "https://api.example.com"))
 
-        _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
-        _ = await DetourNetwork.sendUniversalLinkClick(config: config, url: "https://app.godetour.link/abc")
-        _ = await SdkNetwork.fetchConfig(config: config, etag: nil)
+        _ = await DetourNetwork.resolveShortLink(config: config, sdkPackage: .mmp, url: "https://app.godetour.link/abc")
+        _ = await DetourNetwork.sendUniversalLinkClick(config: config, sdkPackage: .mmp, url: "https://app.godetour.link/abc")
+        _ = await SdkNetwork.fetchConfig(config: config, sdkPackage: .mmp, etag: nil)
         await SdkNetwork.sendConsent(
             DetourConsent(purposes: [DetourPurpose.analytics: true]),
-            consentText: nil, config: config, deviceID: "device", userID: nil
+            consentText: nil, config: config, sdkPackage: .mmp, deviceID: "device", userID: nil
         )
-        _ = await SdkNetwork.sendKillSwitch(enabled: false, at: Date(), config: config, deviceID: "device")
+        _ = await SdkNetwork.sendKillSwitch(enabled: false, at: Date(), config: config, sdkPackage: .mmp, deviceID: "device")
         let requests: [AnalyticsRequest] = [
             .event(name: "test", data: nil, at: Date()),
             .retention(name: "app_open", at: Date()),
@@ -80,27 +80,28 @@ final class DetourNetworkBaseURLTests: XCTestCase {
             .conversion(DetourConversion(name: "purchase", revenue: 4.99, currency: "USD", revenueType: .iap), at: Date()),
         ]
         for request in requests {
-            await AnalyticsNetwork.send(request, config: config, deviceID: "device", userID: nil)
+            await AnalyticsNetwork.send(request, config: config, sdkPackage: .mmp, deviceID: "device", userID: nil)
         }
 
         let matched = expectation(description: "match-link completed")
-        DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
+        DetourNetwork.matchLink(config: config, sdkPackage: .mmp, request: Self.matchRequest) { _ in matched.fulfill() }
         await fulfillment(of: [matched], timeout: 5)
 
         XCTAssertEqual(
             Set(RecordingURLProtocol.recordedURLs.map(\.absoluteString)),
             Set(DetourEndpoint.allCases.map { "https://api.example.com/\($0.rawValue)" })
         )
+        XCTAssertEqual(Set(RecordingURLProtocol.recordedPackages), ["mmp"])
     }
 
     func testInvalidBaseURLSendsNoRequests() async {
         let config = DetourConfig(apiKey: "key", appID: "app", baseURL: URL(string: "http://api.example.com"))
 
-        _ = await DetourNetwork.resolveShortLink(config: config, url: "https://app.godetour.link/abc")
-        await AnalyticsNetwork.send(.event(name: "test", data: nil, at: Date()), config: config, deviceID: "device", userID: nil)
+        _ = await DetourNetwork.resolveShortLink(config: config, sdkPackage: .core, url: "https://app.godetour.link/abc")
+        await AnalyticsNetwork.send(.event(name: "test", data: nil, at: Date()), config: config, sdkPackage: .core, deviceID: "device", userID: nil)
 
         let matched = expectation(description: "match-link completed")
-        DetourNetwork.matchLink(config: config, request: Self.matchRequest) { _ in matched.fulfill() }
+        DetourNetwork.matchLink(config: config, sdkPackage: .core, request: Self.matchRequest) { _ in matched.fulfill() }
         await fulfillment(of: [matched], timeout: 5)
 
         XCTAssertTrue(RecordingURLProtocol.recordedURLs.isEmpty)
@@ -127,6 +128,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
 private final class RecordingURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var urls: [URL] = []
+    private static var packages: [String] = []
 
     static var recordedURLs: [URL] {
         lock.lock()
@@ -134,9 +136,16 @@ private final class RecordingURLProtocol: URLProtocol {
         return urls
     }
 
+    static var recordedPackages: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return packages
+    }
+
     static func reset() {
         lock.lock()
         urls = []
+        packages = []
         lock.unlock()
     }
 
@@ -147,6 +156,7 @@ private final class RecordingURLProtocol: URLProtocol {
         if let url = request.url {
             Self.lock.lock()
             Self.urls.append(url)
+            Self.packages.append(request.value(forHTTPHeaderField: "X-SDK-Package") ?? "")
             Self.lock.unlock()
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!

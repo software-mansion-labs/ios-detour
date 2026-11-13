@@ -15,8 +15,6 @@ enum DetourConstants {
     static let sdkVersion = "1.1.2"
     static let sdkHeaderField = "X-SDK"
     static let sdkPackageHeaderField = "X-SDK-Package"
-    // `mmp` comes with the attribution product; the core SDK always reports `core`.
-    static let sdkPackageHeaderValue = "core"
     static let sdkHeaderValue: String = {
         if let markerClass = NSClassFromString(flutterMarkerClassName) as? NSObject.Type,
            markerClass.responds(to: flutterSdkHeaderSelector),
