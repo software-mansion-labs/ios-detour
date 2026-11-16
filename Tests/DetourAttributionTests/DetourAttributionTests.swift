@@ -83,20 +83,19 @@ final class ConversionValueStoreTests: XCTestCase {
     func testTheValueOnlyGoesUp() {
         let store = ConversionValueStore(defaults: defaults)
 
-        XCTAssertTrue(store.raiseHighestFine(to: 10, installID: "a"))
-        XCTAssertFalse(store.raiseHighestFine(to: 10, installID: "a"))
-        XCTAssertFalse(store.raiseHighestFine(to: 3, installID: "a"))
-        XCTAssertTrue(store.raiseHighestFine(to: 11, installID: "a"))
+        store.raiseHighestFine(to: 10, installID: "a")
+        store.raiseHighestFine(to: 3, installID: "a")
+        XCTAssertEqual(store.highestFine(installID: "a"), 10)
     }
 
     func testAnotherInstallStartsOver() {
         let store = ConversionValueStore(defaults: defaults)
         store.markRegistered(installID: "a")
-        _ = store.raiseHighestFine(to: 30, installID: "a")
+        store.raiseHighestFine(to: 30, installID: "a")
         XCTAssertEqual(store.count("purchase", installID: "a"), 1)
 
         XCTAssertFalse(store.isRegistered(installID: "b"))
-        XCTAssertTrue(store.raiseHighestFine(to: 1, installID: "b"))
+        XCTAssertEqual(store.highestFine(installID: "b"), -1)
         XCTAssertEqual(store.count("purchase", installID: "b"), 1)
     }
 }
@@ -112,23 +111,31 @@ final class DetourAttributionRegistrationTests: XCTestCase {
         }
     }
 
-    private final class FakeUpdater: PostbackUpdating, @unchecked Sendable {
+    @MainActor
+    private final class FakeUpdater: PostbackUpdating {
         var registerResults: [Bool]
+        var updateResults: [Bool]
         var registrations = 0
         var updates: [Int] = []
+        var calls: [String] = []
 
-        init(registerResults: [Bool]) {
+        init(registerResults: [Bool], updateResults: [Bool] = []) {
             self.registerResults = registerResults
+            self.updateResults = updateResults
         }
 
         func register() async -> Bool {
             registrations += 1
+            // Gives a value update started next to it the chance to overtake it.
+            for _ in 0 ..< 3 { await Task.yield() }
+            calls.append("register")
             return registerResults.isEmpty ? true : registerResults.removeFirst()
         }
 
         func update(fine: Int, coarse: CoarseValue?, lock: Bool) async -> Bool {
             updates.append(fine)
-            return true
+            calls.append("update \(fine)")
+            return updateResults.isEmpty ? true : updateResults.removeFirst()
         }
     }
 
@@ -163,7 +170,23 @@ final class DetourAttributionRegistrationTests: XCTestCase {
         await settle()
         XCTAssertEqual(updater.registrations, 2)
         XCTAssertTrue(store.isRegistered(installID: "install"))
-        XCTAssertEqual(updater.updates, [12])
+        XCTAssertEqual(updater.calls, ["register", "register", "update 12"])
+    }
+
+    func testAValueSKAdNetworkRejectedIsSentAgain() async {
+        let updater = FakeUpdater(registerResults: [], updateResults: [false, true])
+        let attribution = DetourAttribution(store: store, updater: updater)
+        attribution.start(with: FakeHost())
+        await settle()
+
+        attribution.didLogConversion(purchase)
+        await settle()
+        attribution.didLogConversion(purchase)
+        await settle()
+        attribution.didLogConversion(purchase)
+        await settle()
+
+        XCTAssertEqual(updater.updates, [12, 12])
     }
 
     func testNothingReachesSKAdNetworkWithoutConsent() async {

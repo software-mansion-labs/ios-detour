@@ -64,15 +64,14 @@ final class ConversionValueStore {
         return count
     }
 
-    /// True and stored when `fine` is above every value reported so far: SKAdNetwork takes only increases.
-    func raiseHighestFine(to fine: Int, installID: String) -> Bool {
-        var raised = false
-        update(installID) {
-            guard fine > $0.highestFine else { return }
-            $0.highestFine = fine
-            raised = true
-        }
-        return raised
+    /// The highest value SKAdNetwork took from this install, or -1 before the first one.
+    func highestFine(installID: String) -> Int {
+        state(installID).highestFine
+    }
+
+    /// Keeps the higher of the stored value and `fine`: SKAdNetwork takes only increases.
+    func raiseHighestFine(to fine: Int, installID: String) {
+        update(installID) { $0.highestFine = max($0.highestFine, fine) }
     }
 
     private func state(_ installID: String) -> InstallState {

@@ -20,7 +20,7 @@ public final class DetourAttribution: DetourAttributionProvider {
     private let store: ConversionValueStore
     private let updater: PostbackUpdating
     private var host: AttributionHosting?
-    private var isRegistering = false
+    private var registration: Task<Void, Never>?
 
     public convenience init() {
         self.init(store: ConversionValueStore(), updater: ApplePostbackUpdater())
@@ -50,10 +50,18 @@ public final class DetourAttribution: DetourAttributionProvider {
         let installID = host.installID
         let count = store.count(conversion.name, installID: installID)
         guard let rule = store.schema.bestRule(for: conversion, count: count),
-              store.raiseHighestFine(to: rule.fine, installID: installID)
+              rule.fine > store.highestFine(installID: installID)
         else { return }
         let updater = updater
-        Task { await updater.update(fine: rule.fine, coarse: rule.coarse, lock: rule.lock ?? false) }
+        let registration = registration
+        Task {
+            // On iOS 15.4+ registering sends the value 0, so it must land before this value, not after.
+            await registration?.value
+            // Stored only once SKAdNetwork took it, so a failed value is sent again by the next conversion.
+            if await updater.update(fine: rule.fine, coarse: rule.coarse, lock: rule.lock ?? false) {
+                store.raiseHighestFine(to: rule.fine, installID: installID)
+            }
+        }
     }
 
     public nonisolated func attributionToken() async -> String? {
@@ -63,15 +71,14 @@ public final class DetourAttribution: DetourAttributionProvider {
     // On the first launch with consent, so the install counts for SKAdNetwork attribution. Marked
     // only once SKAdNetwork took it, so a failed attempt runs again on the next start or conversion.
     private func registerIfAllowed() {
-        guard let host, host.isAttributionAllowed, !isRegistering, !store.isRegistered(installID: host.installID) else { return }
-        isRegistering = true
+        guard let host, host.isAttributionAllowed, registration == nil, !store.isRegistered(installID: host.installID) else { return }
         let installID = host.installID
         let updater = updater
-        Task {
+        registration = Task {
             if await updater.register() {
                 store.markRegistered(installID: installID)
             }
-            isRegistering = false
+            registration = nil
         }
     }
 }
