@@ -4,8 +4,21 @@ import Foundation
 enum SdkNetwork {
     private static let tag = "SdkApiClient"
 
-    static func fetchConfig(config: DetourConfig, sdkPackage: SdkPackage, etag: String?) async -> SdkConfigStore.FetchResult {
-        guard let url = DetourEndpoints.url(.sdkConfig, config: config) else { return .failed }
+    static func fetchConfig(config: DetourConfig, sdkPackage: SdkPackage, etag: String?) async -> DetourFetchResult {
+        await get(.sdkConfig, config: config, sdkPackage: sdkPackage, etag: etag)
+    }
+
+    static func fetchConversionValueSchema(config: DetourConfig, sdkPackage: SdkPackage, etag: String?) async -> DetourFetchResult {
+        await get(.conversionValueSchema, config: config, sdkPackage: sdkPackage, etag: etag)
+    }
+
+    private static func get(
+        _ endpoint: DetourEndpoint,
+        config: DetourConfig,
+        sdkPackage: SdkPackage,
+        etag: String?
+    ) async -> DetourFetchResult {
+        guard let url = DetourEndpoints.url(endpoint, config: config) else { return .failed }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -26,11 +39,11 @@ enum SdkNetwork {
             case 304:
                 return .notModified
             default:
-                DetourLogger.warn(tag, "[Detour:CONFIG] sdk/config fetch failed: \(httpResponse.statusCode); using the last config.")
+                DetourLogger.warn(tag, "[Detour:CONFIG] \(endpoint.rawValue) fetch failed: \(httpResponse.statusCode); using the last copy.")
                 return .failed
             }
         } catch {
-            DetourLogger.warn(tag, "[Detour:CONFIG] sdk/config fetch exception: \(error.localizedDescription); using the last config.")
+            DetourLogger.warn(tag, "[Detour:CONFIG] \(endpoint.rawValue) fetch exception: \(error.localizedDescription); using the last copy.")
             return .failed
         }
     }

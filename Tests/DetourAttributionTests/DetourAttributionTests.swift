@@ -2,12 +2,179 @@ import Detour
 import XCTest
 @testable import DetourAttribution
 
-final class DetourAttributionTests: XCTestCase {
-    func testIsTheProviderTheCoreSdkTakes() async {
-        let provider: DetourAttributionProvider = DetourAttribution()
+final class ConversionValueSchemaTests: XCTestCase {
+    // The example from the API contract, with the currency in the condition.
+    private let schema = try! JSONDecoder().decode(ConversionValueSchema.self, from: Data("""
+    {
+      "version": 3,
+      "rules": [
+        { "event": "purchase", "condition": { "revenue_gte": 10, "currency": "USD" }, "fine": 42, "coarse": "high", "lock": false, "priority": 10 },
+        { "event": "purchase", "fine": 20, "coarse": "medium", "lock": false, "priority": 5 },
+        { "event": "tutorial_complete", "condition": { "count_gte": 2 }, "fine": 5, "coarse": "low", "lock": true, "priority": 1 },
+        { "event": "purchase", "fine": 64, "priority": 99 }
+      ]
+    }
+    """.utf8))
 
-        let token = await provider.attributionToken()
+    private func purchase(_ revenue: Decimal, _ currency: String = "USD") -> DetourConversion {
+        DetourConversion(name: "purchase", revenue: revenue, currency: currency, revenueType: .iap)
+    }
 
-        XCTAssertNil(token)
+    func testTheHighestFineAmongMatchingRulesWins() {
+        XCTAssertEqual(schema.bestRule(for: purchase(15), count: 1)?.fine, 42)
+        XCTAssertEqual(schema.bestRule(for: purchase(5), count: 1)?.fine, 20)
+    }
+
+    func testARevenueRuleMatchesOnlyItsCurrency() {
+        XCTAssertEqual(schema.bestRule(for: purchase(15, "EUR"), count: 1)?.fine, 20)
+    }
+
+    func testACountRuleWaitsForEnoughConversions() {
+        let tutorial = DetourConversion(name: "tutorial_complete", revenue: 0, currency: "USD", revenueType: .other)
+
+        XCTAssertNil(schema.bestRule(for: tutorial, count: 1))
+        XCTAssertEqual(schema.bestRule(for: tutorial, count: 2)?.lock, true)
+    }
+
+    func testPriorityBreaksATieOnFine() throws {
+        let tied = try JSONDecoder().decode(ConversionValueSchema.self, from: Data("""
+        { "version": 1, "rules": [
+          { "event": "purchase", "fine": 7, "coarse": "low", "priority": 1 },
+          { "event": "purchase", "fine": 7, "coarse": "high", "priority": 2 }
+        ] }
+        """.utf8))
+
+        XCTAssertEqual(tied.bestRule(for: purchase(1), count: 1)?.coarse, .high)
+    }
+
+    func testNoActiveSchemaMatchesNothing() throws {
+        let empty = try JSONDecoder().decode(ConversionValueSchema.self, from: Data(#"{ "version": null, "rules": [] }"#.utf8))
+
+        XCTAssertNil(empty.bestRule(for: purchase(100), count: 1))
+    }
+}
+
+@MainActor
+final class ConversionValueStoreTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private let suiteName = "ConversionValueStoreTests"
+    private let schemaBody = Data(#"{ "version": 1, "rules": [{ "event": "purchase", "fine": 9 }] }"#.utf8)
+
+    override func setUp() async throws {
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testANewSchemaIsKeptAcrossLaunchesAndANotModifiedResponseKeepsIt() {
+        ConversionValueStore(defaults: defaults).apply(.updated(body: schemaBody, etag: "v1"))
+
+        let nextLaunch = ConversionValueStore(defaults: defaults)
+        nextLaunch.apply(.notModified)
+        nextLaunch.apply(.failed)
+
+        XCTAssertEqual(nextLaunch.schemaETag, "v1")
+        XCTAssertEqual(nextLaunch.schema.rules.map(\.fine), [9])
+    }
+
+    func testTheValueOnlyGoesUp() {
+        let store = ConversionValueStore(defaults: defaults)
+
+        XCTAssertTrue(store.raiseHighestFine(to: 10, installID: "a"))
+        XCTAssertFalse(store.raiseHighestFine(to: 10, installID: "a"))
+        XCTAssertFalse(store.raiseHighestFine(to: 3, installID: "a"))
+        XCTAssertTrue(store.raiseHighestFine(to: 11, installID: "a"))
+    }
+
+    func testAnotherInstallStartsOver() {
+        let store = ConversionValueStore(defaults: defaults)
+        store.markRegistered(installID: "a")
+        _ = store.raiseHighestFine(to: 30, installID: "a")
+        XCTAssertEqual(store.count("purchase", installID: "a"), 1)
+
+        XCTAssertFalse(store.isRegistered(installID: "b"))
+        XCTAssertTrue(store.raiseHighestFine(to: 1, installID: "b"))
+        XCTAssertEqual(store.count("purchase", installID: "b"), 1)
+    }
+}
+
+@MainActor
+final class DetourAttributionRegistrationTests: XCTestCase {
+    private final class FakeHost: AttributionHosting {
+        var isAttributionAllowed = true
+        let installID = "install"
+
+        func fetchConversionValueSchema(etag: String?) async -> DetourFetchResult {
+            .updated(body: Data(#"{ "version": 1, "rules": [{ "event": "purchase", "fine": 12, "coarse": "high" }] }"#.utf8), etag: "v1")
+        }
+    }
+
+    private final class FakeUpdater: PostbackUpdating, @unchecked Sendable {
+        var registerResults: [Bool]
+        var registrations = 0
+        var updates: [Int] = []
+
+        init(registerResults: [Bool]) {
+            self.registerResults = registerResults
+        }
+
+        func register() async -> Bool {
+            registrations += 1
+            return registerResults.isEmpty ? true : registerResults.removeFirst()
+        }
+
+        func update(fine: Int, coarse: CoarseValue?, lock: Bool) async -> Bool {
+            updates.append(fine)
+            return true
+        }
+    }
+
+    private let suiteName = "DetourAttributionRegistrationTests"
+    private var store: ConversionValueStore!
+    private let purchase = DetourConversion(name: "purchase", revenue: 5, currency: "USD", revenueType: .iap)
+
+    override func setUp() async throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        store = ConversionValueStore(defaults: defaults)
+    }
+
+    override func tearDown() async throws {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+
+    // Lets the tasks started by the provider finish.
+    private func settle() async {
+        for _ in 0 ..< 20 { await Task.yield() }
+    }
+
+    func testAFailedRegistrationRunsAgainOnTheNextConversion() async {
+        let updater = FakeUpdater(registerResults: [false, true])
+        let attribution = DetourAttribution(store: store, updater: updater)
+
+        attribution.start(with: FakeHost())
+        await settle()
+        XCTAssertFalse(store.isRegistered(installID: "install"))
+
+        attribution.didLogConversion(purchase)
+        await settle()
+        XCTAssertEqual(updater.registrations, 2)
+        XCTAssertTrue(store.isRegistered(installID: "install"))
+        XCTAssertEqual(updater.updates, [12])
+    }
+
+    func testNothingReachesSKAdNetworkWithoutConsent() async {
+        let updater = FakeUpdater(registerResults: [])
+        let attribution = DetourAttribution(store: store, updater: updater)
+        let host = FakeHost()
+        host.isAttributionAllowed = false
+
+        attribution.start(with: host)
+        await settle()
+
+        XCTAssertEqual(updater.registrations, 0)
     }
 }

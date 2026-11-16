@@ -5,6 +5,11 @@ import XCTest
 final class AttributionModeTests: XCTestCase {
     private final class RecordingProvider: DetourAttributionProvider, @unchecked Sendable {
         var conversions: [String] = []
+        var starts = 0
+
+        func didStart(_ host: DetourAttributionHost) {
+            starts += 1
+        }
 
         func didLogConversion(_ conversion: DetourConversion) {
             conversions.append(conversion.name)
@@ -34,6 +39,15 @@ final class AttributionModeTests: XCTestCase {
         XCTAssertEqual(AttributionMode.sdkPackage(hasProvider: true, decision: .send), .mmp)
         XCTAssertEqual(AttributionMode.sdkPackage(hasProvider: true, decision: .wait), .core)
         XCTAssertEqual(AttributionMode.sdkPackage(hasProvider: true, decision: .drop), .core)
+    }
+
+    func testTheProviderStartsOnceWhenTheSdkStartsAgain() {
+        let config = DetourConfig(apiKey: "key", appID: "app")
+
+        AttributionMode.start(config: config)
+        AttributionMode.start(config: config)
+
+        XCTAssertEqual(provider.starts, 1)
     }
 
     func testConversionsReachTheProviderOnlyWithAttributionConsent() {

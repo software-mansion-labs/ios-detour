@@ -18,6 +18,7 @@ final class DetourEndpointsTests: XCTestCase {
             .sdkConfig: "https://godetour.dev/api/sdk/config",
             .sdkConsent: "https://godetour.dev/api/sdk/consent",
             .sdkDisable: "https://godetour.dev/api/sdk/disable",
+            .conversionValueSchema: "https://godetour.dev/api/sdk/conversion-value-schema",
         ]
         XCTAssertEqual(Set(expected.keys), Set(DetourEndpoint.allCases))
 
@@ -68,6 +69,7 @@ final class DetourNetworkBaseURLTests: XCTestCase {
         _ = await DetourNetwork.resolveShortLink(config: config, sdkPackage: .mmp, url: "https://app.godetour.link/abc")
         _ = await DetourNetwork.sendUniversalLinkClick(config: config, sdkPackage: .mmp, url: "https://app.godetour.link/abc")
         _ = await SdkNetwork.fetchConfig(config: config, sdkPackage: .mmp, etag: nil)
+        _ = await SdkNetwork.fetchConversionValueSchema(config: config, sdkPackage: .mmp, etag: nil)
         await SdkNetwork.sendConsent(
             DetourConsent(purposes: [DetourPurpose.analytics: true]),
             consentText: nil, config: config, sdkPackage: .mmp, deviceID: "device", userID: nil

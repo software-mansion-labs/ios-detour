@@ -64,6 +64,7 @@ public class Detour {
 
         isStarted = true
         DetourAnalytics.mount(config: config)
+        AttributionMode.start(config: config)
         let waiting = runOnStart
         runOnStart = []
         waiting.forEach { $0() }
