@@ -29,7 +29,7 @@ Latest stable release: `1.1.2`
 
 ### Swift Package Manager
 
-In Xcode, go to `File > Add Package Dependencies...`, enter the repository URL, and add `Detour` to your app target.
+In Xcode, go to `File > Add Package Dependencies...`, enter the repository URL, and add `Detour` to your app target. For [attribution](#attribution), add `DetourAttribution` too; an app with `Detour` alone links no attribution framework.
 
 Or in `Package.swift`:
 
@@ -47,6 +47,7 @@ platform :ios, '15.0'
 target 'YourAppTarget' do
   use_frameworks!
   pod 'Detour', '1.1.2'
+  pod 'DetourAttribution', '1.1.2' # only for attribution
 end
 ```
 
@@ -211,6 +212,47 @@ To turn the SDK off for a user, call `setEnabled(false)`. It stays off across la
 Detour.shared.setEnabled(false)
 ```
 
+### Attribution
+
+The `DetourAttribution` product attributes installs and conversions to your ad campaigns. Pass it to `configure`:
+
+```swift
+import Detour
+import DetourAttribution
+
+Detour.shared.configure(config, attribution: DetourAttribution(), autoStart: false)
+Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+    // handle result.link
+}
+
+// after your consent platform has the user's choice
+Detour.shared.setConsent(DetourConsent(purposes: [
+    DetourPurpose.analytics: true,
+    DetourPurpose.attribution: true,
+]))
+Detour.shared.start()
+```
+
+Everything below happens only while the user's consent to `DetourPurpose.attribution` is passed on this launch. Without it, deferred links, analytics and conversions work as without the product, and nothing is attributed to a campaign.
+
+- Requests feed attribution of the install to the ad network click it came from.
+- `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The value only goes up.
+- The first deferred link request carries the Apple Search Ads attribution token, so an install from a Search Ads campaign is not counted as organic.
+
+The install is attributed from the first deferred link request, and that request goes once per install. Start the SDK only after the consent answer: with `autoStart: false` and `start()` as above, or with `setConsent` before `configure` when your consent platform already has the choice at launch. If the SDK starts before the answer, that install is never attributed.
+
+To receive SKAdNetwork and AdAttributionKit attributions from an ad network, add the network's identifiers to your app's `Info.plist`. Each network publishes its list:
+
+```xml
+<key>SKAdNetworkItems</key>
+<array>
+    <dict>
+        <key>SKAdNetworkIdentifier</key>
+        <string>example123.skadnetwork</string>
+    </dict>
+</array>
+```
+
 ## Analytics
 
 Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:
@@ -372,6 +414,13 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 | `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
 
 Every collected type is declared as not linked to the user and not used for tracking. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
+
+</details>
+
+<details>
+<summary>With DetourAttribution</summary>
+
+`DetourAttribution` has its own `PrivacyInfo.xcprivacy`, copied into your app only when you add the product. It declares `NSPrivacyTracking = true` with no tracking domains, so the Privacy Report of an app with it shows tracking. It collects no data of its own beyond the Detour manifest above: it sends the SKAdNetwork and AdAttributionKit conversion values to Apple and the Apple Search Ads token to Detour. Detour never shows the App Tracking Transparency prompt; whether your app needs it depends on how it uses the data. The App Store Connect answers below cover Detour without this product: with attribution on, review them for how your app uses the data for its ad campaigns.
 
 </details>
 
