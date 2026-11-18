@@ -21,7 +21,7 @@ Pod::Spec.new do |s|
 
   s.source_files = 'Sources/DetourAttribution/**/*.swift'
   s.dependency 'Detour', s.version.to_s
-  s.frameworks = 'StoreKit'
+  s.frameworks = 'StoreKit', 'AdServices'
   # Weak, so an app that supports iOS before 17.4 still launches there without the framework.
   s.weak_frameworks = 'AdAttributionKit'
 

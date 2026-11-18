@@ -65,12 +65,12 @@ final class InstallStoreTests: XCTestCase {
 }
 
 final class MatchRequestIdentityTests: XCTestCase {
-    private func encodedKeys(userID: String?) throws -> [String: Any] {
+    private func encodedKeys(userID: String?, asaToken: String? = nil) throws -> [String: Any] {
         let request = SignalMatchRequest(
             platform: "ios", model: "iPhone15,2", manufacturer: "Apple", systemVersion: "18.6",
             screenWidth: 393, screenHeight: 852, scale: 3, locale: [LocaleTag(languageTag: "pl-PL")],
             timezone: "Europe/Warsaw", userAgent: "ua", timestamp: 0, pastedLink: nil,
-            deviceID: "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01", userID: userID
+            deviceID: "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01", userID: userID, asaToken: asaToken
         )
         return try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
     }
@@ -85,6 +85,11 @@ final class MatchRequestIdentityTests: XCTestCase {
 
     func testOmitsUserIDWhenNotSet() throws {
         XCTAssertNil(try encodedKeys(userID: nil)["user_id"])
+    }
+
+    func testSendsTheSearchAdsTokenOnlyWhenSet() throws {
+        XCTAssertEqual(try encodedKeys(userID: nil, asaToken: "asa-token")["asa_token"] as? String, "asa-token")
+        XCTAssertNil(try encodedKeys(userID: nil)["asa_token"])
     }
 }
 

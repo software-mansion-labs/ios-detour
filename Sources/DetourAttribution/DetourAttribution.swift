@@ -1,3 +1,4 @@
+import AdServices
 import Detour
 import Foundation
 
@@ -64,8 +65,15 @@ public final class DetourAttribution: DetourAttributionProvider {
         }
     }
 
+    // The token says nothing by itself: the backend asks Apple whether the install came from a
+    // Search Ads campaign, so it goes with every install, not only the attributed ones.
     public nonisolated func attributionToken() async -> String? {
-        nil
+        do {
+            return try AAAttribution.attributionToken()
+        } catch {
+            DetourAttributionHost.logWarning("[Detour:ATTRIBUTION] Apple Search Ads token unavailable: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // On the first launch with consent, so the install counts for SKAdNetwork attribution. Marked

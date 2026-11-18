@@ -84,6 +84,23 @@ enum AttributionMode {
         hasProvider && decision == .send ? .mmp : .core
     }
 
+    // PROVISIONAL: the deferred link waits at most 1 s for the token, then goes without it.
+    /// The provider's Apple Search Ads token for a request of this package, or `nil` for `core`,
+    /// without a provider, or with no token in time.
+    static func attributionToken(for sdkPackage: SdkPackage, timeoutNanoseconds: UInt64 = 1_000_000_000) async -> String? {
+        guard sdkPackage == .mmp, let provider else { return nil }
+        // A task group would still wait for a slow provider after the timeout, so the first
+        // answer resumes the caller and the later one is dropped.
+        return await withCheckedContinuation { continuation in
+            let first = FirstAnswer(continuation)
+            Task { first.resume(await provider.attributionToken()) }
+            Task {
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                first.resume(nil)
+            }
+        }
+    }
+
     static func forwardConversion(_ conversion: DetourConversion) {
         forwardConversion(conversion, decision: ConsentGate.decision(for: DetourPurpose.attribution))
     }
@@ -91,5 +108,23 @@ enum AttributionMode {
     static func forwardConversion(_ conversion: DetourConversion, decision: GateDecision) {
         guard decision == .send else { return }
         provider?.didLogConversion(conversion)
+    }
+}
+
+/// Resumes a continuation once, with whichever answer comes first.
+private final class FirstAnswer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    init(_ continuation: CheckedContinuation<String?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: String?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
     }
 }

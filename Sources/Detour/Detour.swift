@@ -340,13 +340,16 @@ public class Detour {
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
-            let matchRequest = await DeviceUtils.collectSignals(
+            var matchRequest = await DeviceUtils.collectSignals(
                 shouldUseClipboard: config.shouldUseClipboard,
                 deviceID: InstallStore.shared.deviceID,
                 userID: UserIdStore.current
             )
+            // One decision for the header and the token: an `asa_token` never goes out as `core`.
+            let sdkPackage = AttributionMode.sdkPackage
+            matchRequest.asaToken = await AttributionMode.attributionToken(for: sdkPackage)
             DetourNetwork.matchLink(
-                config: config, sdkPackage: AttributionMode.sdkPackage, request: matchRequest, linkType: .deferred
+                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
             ) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
