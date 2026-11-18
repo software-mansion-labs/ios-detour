@@ -45,7 +45,9 @@ public final class DetourAttributionHost {
     }
 
     public func fetchConversionValueSchema(etag: String?) async -> DetourFetchResult {
-        await SdkNetwork.fetchConversionValueSchema(config: config, sdkPackage: AttributionMode.sdkPackage, etag: etag)
+        // The kill switch stops every request but sdk/disable; the cached schema stays.
+        guard InstallStore.shared.isEnabled else { return .failed }
+        return await SdkNetwork.fetchConversionValueSchema(config: config, sdkPackage: AttributionMode.sdkPackage, etag: etag)
     }
 }
 
