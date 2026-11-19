@@ -21,18 +21,27 @@ public class Detour {
     /// for `start()`, so the app can wait for its consent platform first. A link the user taps
     /// before that is still routed and counted: the SDK sends the link click (link URL, app version,
     /// OS version, device model), because your plan's click limit applies to it.
-    /// Only the first config is used.
-    public func configure(_ config: DetourConfig, autoStart: Bool = true) {
+    /// Pass `DetourAttribution()` from the DetourAttribution product as `attribution` to turn on
+    /// attribution. Only the first config is used.
+    public func configure(
+        _ config: DetourConfig,
+        attribution: DetourAttributionProvider? = nil,
+        autoStart: Bool = true
+    ) {
         if self.config != nil {
             DetourLogger.warn(tag, "[Detour:CONFIG] configure called again; the first config is kept.")
         } else {
             self.config = config
+            AttributionMode.register(attribution)
             applyUserIdValidator(config.userIdValidator)
             _ = InstallStore.shared.deviceID
             SdkConfigStore.shared.load(appID: config.appID)
             refreshSdkConfig(config)
             killSwitchReporter = KillSwitchReporter(store: .shared) { enabled, date in
-                await SdkNetwork.sendKillSwitch(enabled: enabled, at: date, config: config, deviceID: InstallStore.shared.deviceID)
+                await SdkNetwork.sendKillSwitch(
+                    enabled: enabled, at: date, config: config,
+                    sdkPackage: AttributionMode.sdkPackage, deviceID: InstallStore.shared.deviceID
+                )
             }
             killSwitchReporter?.sync()
             if let consentToSend {
@@ -55,6 +64,7 @@ public class Detour {
 
         isStarted = true
         DetourAnalytics.mount(config: config)
+        AttributionMode.start(config: config)
         let waiting = runOnStart
         runOnStart = []
         waiting.forEach { $0() }
@@ -65,7 +75,7 @@ public class Detour {
         guard InstallStore.shared.isEnabled else { return }
         Task {
             let store = SdkConfigStore.shared
-            let result = await SdkNetwork.fetchConfig(config: config, etag: store.etag)
+            let result = await SdkNetwork.fetchConfig(config: config, sdkPackage: AttributionMode.sdkPackage, etag: store.etag)
             if store.apply(result, appID: config.appID) {
                 DetourAnalytics.shared.reevaluateWaiting()
             }
@@ -98,8 +108,11 @@ public class Detour {
         guard InstallStore.shared.isEnabled else { return }
         let deviceID = InstallStore.shared.deviceID
         let userID = UserIdStore.current
+        let sdkPackage = AttributionMode.sdkPackage
         Task {
-            if await SdkNetwork.sendConsent(consent, consentText: text, config: config, deviceID: deviceID, userID: userID) {
+            if await SdkNetwork.sendConsent(
+                consent, consentText: text, config: config, sdkPackage: sdkPackage, deviceID: deviceID, userID: userID
+            ) {
                 ConsentStore.markConfirmed(consent, deviceID: deviceID)
             }
         }
@@ -261,7 +274,7 @@ public class Detour {
                 var visited = visitedShortLinks
                 visited.insert(normalized)
 
-                if let resolvedUrl = await DetourNetwork.resolveShortLink(config: config, url: rawLink) {
+                if let resolvedUrl = await DetourNetwork.resolveShortLink(config: config, sdkPackage: AttributionMode.sdkPackage, url: rawLink) {
                     let normalizedResolved = LinkUtils.normalizeRawLink(resolvedUrl.absoluteString)
                     if !visited.contains(normalizedResolved) {
                         return await resolveLink(
@@ -327,12 +340,17 @@ public class Detour {
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
-            let matchRequest = await DeviceUtils.collectSignals(
+            var matchRequest = await DeviceUtils.collectSignals(
                 shouldUseClipboard: config.shouldUseClipboard,
                 deviceID: InstallStore.shared.deviceID,
                 userID: UserIdStore.current
             )
-            DetourNetwork.matchLink(config: config, request: matchRequest, linkType: .deferred) { [weak self] result in
+            // One decision for the header and the token: an `asa_token` never goes out as `core`.
+            let sdkPackage = AttributionMode.sdkPackage
+            matchRequest.asaToken = await AttributionMode.attributionToken(for: sdkPackage)
+            DetourNetwork.matchLink(
+                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
+            ) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
                         completion(result)
@@ -375,7 +393,9 @@ public class Detour {
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
         // The click is Detour's measurement, not routing, so the kill switch stops it.
         if LinkUtils.detectLinkType(from: url) == .verified, let config, InstallStore.shared.isEnabled {
-            let clickResult = await DetourNetwork.sendUniversalLinkClick(config: config, url: url.absoluteString)
+            let clickResult = await DetourNetwork.sendUniversalLinkClick(
+                config: config, sdkPackage: AttributionMode.sdkPackage, url: url.absoluteString
+            )
             if !clickResult.allowed {
                 return .empty()
             }

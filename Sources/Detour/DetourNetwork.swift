@@ -7,12 +7,12 @@ class DetourNetwork {
         let link: String?
     }
 
-    static func applyHeaders(to request: inout URLRequest, config: DetourConfig) {
+    static func applyHeaders(to request: inout URLRequest, config: DetourConfig, sdkPackage: SdkPackage) {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(config.appID, forHTTPHeaderField: "X-App-ID")
         request.setValue(DetourConstants.sdkHeaderValue, forHTTPHeaderField: DetourConstants.sdkHeaderField)
-        request.setValue(DetourConstants.sdkPackageHeaderValue, forHTTPHeaderField: DetourConstants.sdkPackageHeaderField)
+        request.setValue(sdkPackage.rawValue, forHTTPHeaderField: DetourConstants.sdkPackageHeaderField)
     }
 
     private static func logAndFail(
@@ -52,6 +52,7 @@ class DetourNetwork {
 
     static func matchLink(
         config: DetourConfig,
+        sdkPackage: SdkPackage,
         request matchRequest: SignalMatchRequest,
         linkType: LinkType = .deferred,
         completion: @escaping @Sendable (DetourResult) -> Void
@@ -74,7 +75,7 @@ class DetourNetwork {
 
         var request = URLRequest(url: apiUrl)
         request.httpMethod = "POST"
-        applyHeaders(to: &request, config: config)
+        applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         request.httpBody = httpBody
 
         DetourLogger.debug(tag, "Sending match request to API")
@@ -136,7 +137,7 @@ class DetourNetwork {
         }
     }
 
-    static func resolveShortLink(config: DetourConfig, url: String) async -> URL? {
+    static func resolveShortLink(config: DetourConfig, sdkPackage: SdkPackage, url: String) async -> URL? {
         guard let endpoint = DetourEndpoints.url(.resolveShort, config: config) else {
             DetourLogger.warn(tag, "[Detour:NETWORK_ERROR] Short link resolution failed: invalid endpoint")
             return nil
@@ -150,7 +151,7 @@ class DetourNetwork {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        applyHeaders(to: &request, config: config)
+        applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         request.httpBody = requestBody
 
         do {
@@ -191,7 +192,7 @@ class DetourNetwork {
         }
     }
 
-    static func sendUniversalLinkClick(config: DetourConfig, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
+    static func sendUniversalLinkClick(config: DetourConfig, sdkPackage: SdkPackage, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
         guard let endpoint = DetourEndpoints.url(.universalLinkClick, config: config) else {
             return (allowed: true, clickId: nil)  // fail-open
         }
@@ -261,7 +262,7 @@ class DetourNetwork {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 5
-        applyHeaders(to: &request, config: config)
+        applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         request.httpBody = body
 
         do {

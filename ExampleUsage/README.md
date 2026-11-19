@@ -47,3 +47,20 @@ Select a simulator or device and press **Run** in Xcode.
 | Deferred link   | Create a link in the Detour dashboard, open it on a fresh install          |
 | Universal Link  | Open `https://<YOUR_UNIVERSAL_LINK_DOMAIN>/...` on a device with the app  |
 | Custom scheme   | Open `<YOUR_CUSTOM_SCHEME>://...` from Safari or another app               |
+
+## Turning on attribution
+
+The example runs without attribution. To try it:
+
+1. In Xcode, select the project → **Package Dependencies**, and add the `DetourAttribution` product to the `DetourExampleApp` target.
+2. In `AppDelegate.swift`, add `import DetourAttribution` and, before `resolveInitialLink`:
+
+   ```swift
+   Detour.shared.setConsent(DetourConsent(purposes: [
+       DetourPurpose.analytics: true,
+       DetourPurpose.attribution: true,
+   ]))
+   Detour.shared.configure(detourConfig, attribution: DetourAttribution())
+   ```
+
+   The example grants consent in code to keep it short. A real app passes the user's choice and starts the SDK after it; see [Attribution](../README.md#attribution).

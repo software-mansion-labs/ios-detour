@@ -47,11 +47,7 @@ struct SdkConfig: Equatable {
 final class SdkConfigStore {
     static let shared = SdkConfigStore()
 
-    enum FetchResult {
-        case updated(body: Data, etag: String?)
-        case notModified
-        case failed
-    }
+    typealias FetchResult = DetourFetchResult
 
     private struct Cached: Codable {
         let appID: String

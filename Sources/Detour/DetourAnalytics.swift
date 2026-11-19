@@ -96,10 +96,12 @@ public final class DetourAnalytics {
         // Requests also start as the app moves to the background (a session end, an event logged
         // on exit), so ask iOS for time to finish them.
         let backgroundTask = BackgroundTask(name: "DetourAnalytics")
+        let sdkPackage = AttributionMode.sdkPackage
         Task {
             await AnalyticsNetwork.send(
                 request,
                 config: config,
+                sdkPackage: sdkPackage,
                 deviceID: InstallStore.shared.deviceID,
                 userID: UserIdStore.current
             )
@@ -131,6 +133,7 @@ public final class DetourAnalytics {
             return
         }
         AnalyticsEmitter.shared.emit(.conversion(conversion, at: Date()))
+        AttributionMode.forwardConversion(conversion)
     }
 }
 

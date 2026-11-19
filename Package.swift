@@ -14,6 +14,12 @@ let package = Package(
             name: "Detour",
             targets: ["Detour"]
         ),
+        // A separate product, so an app with Detour alone links no attribution framework and keeps
+        // its privacy manifest free of tracking.
+        .library(
+            name: "DetourAttribution",
+            targets: ["DetourAttribution"]
+        ),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -24,9 +30,20 @@ let package = Package(
                 .copy("Resources/PrivacyInfo.xcprivacy"),
             ]
         ),
+        .target(
+            name: "DetourAttribution",
+            dependencies: ["Detour"],
+            resources: [
+                .copy("Resources/PrivacyInfo.xcprivacy"),
+            ]
+        ),
         .testTarget(
             name: "DetourTests",
             dependencies: ["Detour"]
+        ),
+        .testTarget(
+            name: "DetourAttributionTests",
+            dependencies: ["DetourAttribution"]
         ),
     ]
 )

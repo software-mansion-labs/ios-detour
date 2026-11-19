@@ -58,7 +58,7 @@ enum AnalyticsNetwork {
         return body
     }
 
-    static func send(_ request: AnalyticsRequest, config: DetourConfig, deviceID: String, userID: String?) async {
+    static func send(_ request: AnalyticsRequest, config: DetourConfig, sdkPackage: SdkPackage, deviceID: String, userID: String?) async {
         let endpoint = endpoint(of: request)
         guard let url = DetourEndpoints.url(endpoint, config: config) else { return }
 
@@ -70,7 +70,7 @@ enum AnalyticsNetwork {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
-        DetourNetwork.applyHeaders(to: &urlRequest, config: config)
+        DetourNetwork.applyHeaders(to: &urlRequest, config: config, sdkPackage: sdkPackage)
         urlRequest.httpBody = bodyData
 
         do {

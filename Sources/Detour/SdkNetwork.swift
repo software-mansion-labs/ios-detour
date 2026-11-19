@@ -4,12 +4,25 @@ import Foundation
 enum SdkNetwork {
     private static let tag = "SdkApiClient"
 
-    static func fetchConfig(config: DetourConfig, etag: String?) async -> SdkConfigStore.FetchResult {
-        guard let url = DetourEndpoints.url(.sdkConfig, config: config) else { return .failed }
+    static func fetchConfig(config: DetourConfig, sdkPackage: SdkPackage, etag: String?) async -> DetourFetchResult {
+        await get(.sdkConfig, config: config, sdkPackage: sdkPackage, etag: etag)
+    }
+
+    static func fetchConversionValueSchema(config: DetourConfig, sdkPackage: SdkPackage, etag: String?) async -> DetourFetchResult {
+        await get(.conversionValueSchema, config: config, sdkPackage: sdkPackage, etag: etag)
+    }
+
+    private static func get(
+        _ endpoint: DetourEndpoint,
+        config: DetourConfig,
+        sdkPackage: SdkPackage,
+        etag: String?
+    ) async -> DetourFetchResult {
+        guard let url = DetourEndpoints.url(endpoint, config: config) else { return .failed }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        DetourNetwork.applyHeaders(to: &request, config: config)
+        DetourNetwork.applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         if let etag {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
@@ -26,11 +39,11 @@ enum SdkNetwork {
             case 304:
                 return .notModified
             default:
-                DetourLogger.warn(tag, "[Detour:CONFIG] sdk/config fetch failed: \(httpResponse.statusCode); using the last config.")
+                DetourLogger.warn(tag, "[Detour:CONFIG] \(endpoint.rawValue) fetch failed: \(httpResponse.statusCode); using the last copy.")
                 return .failed
             }
         } catch {
-            DetourLogger.warn(tag, "[Detour:CONFIG] sdk/config fetch exception: \(error.localizedDescription); using the last config.")
+            DetourLogger.warn(tag, "[Detour:CONFIG] \(endpoint.rawValue) fetch exception: \(error.localizedDescription); using the last copy.")
             return .failed
         }
     }
@@ -40,12 +53,13 @@ enum SdkNetwork {
         _ consent: DetourConsent,
         consentText: String?,
         config: DetourConfig,
+        sdkPackage: SdkPackage,
         deviceID: String,
         userID: String?
     ) async -> Bool {
         guard let body = consentBody(consent, consentText: consentText, deviceID: deviceID, userID: userID) else { return false }
 
-        guard let status = await post(.sdkConsent, body: body, config: config) else { return false }
+        guard let status = await post(.sdkConsent, body: body, config: config, sdkPackage: sdkPackage) else { return false }
         if !(200 ... 299).contains(status) {
             DetourLogger.warn(tag, "[Detour:CONSENT] sdk/consent send failed: \(status)")
             return false
@@ -65,7 +79,7 @@ enum SdkNetwork {
         return body
     }
 
-    static func sendKillSwitch(enabled: Bool, at date: Date, config: DetourConfig, deviceID: String) async -> KillSwitchReporter.Outcome {
+    static func sendKillSwitch(enabled: Bool, at date: Date, config: DetourConfig, sdkPackage: SdkPackage, deviceID: String) async -> KillSwitchReporter.Outcome {
         let body: [String: Any] = [
             "device_id": deviceID,
             "disabled": !enabled,
@@ -74,7 +88,7 @@ enum SdkNetwork {
         guard DetourEndpoints.url(.sdkDisable, config: config) != nil else { return .stop }
         // The server stops writing about 28 s after a request starts, so a request given up
         // after 60 s can no longer land after the next one.
-        guard let status = await post(.sdkDisable, body: body, config: config, timeout: 60) else { return .retry }
+        guard let status = await post(.sdkDisable, body: body, config: config, sdkPackage: sdkPackage, timeout: 60) else { return .retry }
 
         switch status {
         case 200 ... 299:
@@ -92,6 +106,7 @@ enum SdkNetwork {
         _ endpoint: DetourEndpoint,
         body: [String: Any],
         config: DetourConfig,
+        sdkPackage: SdkPackage,
         timeout: TimeInterval? = nil
     ) async -> Int? {
         guard let url = DetourEndpoints.url(endpoint, config: config),
@@ -103,7 +118,7 @@ enum SdkNetwork {
         if let timeout {
             request.timeoutInterval = timeout
         }
-        DetourNetwork.applyHeaders(to: &request, config: config)
+        DetourNetwork.applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         request.httpBody = bodyData
 
         do {
