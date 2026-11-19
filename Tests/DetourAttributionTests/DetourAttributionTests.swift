@@ -55,6 +55,24 @@ final class ConversionValueSchemaTests: XCTestCase {
 }
 
 @MainActor
+final class PostbackCopyKeysTests: XCTestCase {
+    func testBothKeysAreReportedWhenMissingOrEmpty() {
+        XCTAssertEqual(
+            DetourAttribution.missingPostbackCopyKeys(in: ["AttributionCopyEndpoint": ""]),
+            ["NSAdvertisingAttributionReportEndpoint", "AttributionCopyEndpoint"]
+        )
+    }
+
+    func testNothingIsReportedWithBothKeys() {
+        let info = [
+            "NSAdvertisingAttributionReportEndpoint": "https://godetour.dev",
+            "AttributionCopyEndpoint": "https://godetour.dev",
+        ]
+        XCTAssertEqual(DetourAttribution.missingPostbackCopyKeys(in: info), [])
+    }
+}
+
+@MainActor
 final class ConversionValueStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private let suiteName = "ConversionValueStoreTests"

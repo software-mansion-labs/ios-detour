@@ -241,17 +241,18 @@ Everything below happens only while the user's consent to `DetourPurpose.attribu
 
 The install is attributed from the first deferred link request, and that request goes once per install. Start the SDK only after the consent answer: with `autoStart: false` and `start()` as above, or with `setConsent` before `configure` when your consent platform already has the choice at launch. If the SDK starts before the answer, that install is never attributed.
 
-To receive SKAdNetwork and AdAttributionKit attributions from an ad network, add the network's identifiers to your app's `Info.plist`. Each network publishes its list:
+Your app needs no ad network identifiers for its installs to be attributed: `SKAdNetworkItems` belongs in apps that display ads, not in the app being advertised. Apple sends each winning postback to the ad network. To let Detour receive a copy of it, add both keys to your app's `Info.plist`:
 
 ```xml
-<key>SKAdNetworkItems</key>
-<array>
-    <dict>
-        <key>SKAdNetworkIdentifier</key>
-        <string>example123.skadnetwork</string>
-    </dict>
-</array>
+<key>NSAdvertisingAttributionReportEndpoint</key>
+<string>https://godetour.dev</string>
+<key>AttributionCopyEndpoint</key>
+<string>https://godetour.dev</string>
 ```
+
+The first key is for SKAdNetwork, the second for AdAttributionKit (in Xcode: "AdAttributionKit - Postback Copy URL"). Each key takes one URL, so if another attribution provider already uses them, the copies go to only one of you. The SDK logs a warning at start when a key is missing.
+
+> Detour does not process these copies yet. Adding the keys now means your next release does not need another `Info.plist` change.
 
 ## Analytics
 

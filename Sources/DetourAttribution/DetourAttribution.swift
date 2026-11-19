@@ -22,14 +22,28 @@ public final class DetourAttribution: DetourAttributionProvider {
     private let updater: PostbackUpdating
     private var host: AttributionHosting?
     private var registration: Task<Void, Never>?
+    /// `nil` skips the `Info.plist` check.
+    private let infoDictionary: [String: Any]?
 
     public convenience init() {
-        self.init(store: ConversionValueStore(), updater: ApplePostbackUpdater())
+        self.init(
+            store: ConversionValueStore(),
+            updater: ApplePostbackUpdater(),
+            infoDictionary: Bundle.main.infoDictionary ?? [:]
+        )
     }
 
-    init(store: ConversionValueStore, updater: PostbackUpdating) {
+    init(store: ConversionValueStore, updater: PostbackUpdating, infoDictionary: [String: Any]? = nil) {
         self.store = store
         self.updater = updater
+        self.infoDictionary = infoDictionary
+    }
+
+    /// The `Info.plist` keys that tell Apple where to send copies of winning postbacks: SKAdNetwork, then AdAttributionKit.
+    static let postbackCopyKeys = ["NSAdvertisingAttributionReportEndpoint", "AttributionCopyEndpoint"]
+
+    static func missingPostbackCopyKeys(in info: [String: Any]) -> [String] {
+        postbackCopyKeys.filter { ((info[$0] as? String) ?? "").isEmpty }
     }
 
     public func didStart(_ host: DetourAttributionHost) {
@@ -39,6 +53,7 @@ public final class DetourAttribution: DetourAttributionProvider {
     // The schema is asked for on every start, so a rule changed on the server reaches the app on its next launch.
     func start(with host: AttributionHosting) {
         self.host = host
+        warnAboutMissingPostbackCopyKeys()
         registerIfAllowed()
         Task {
             store.apply(await host.fetchConversionValueSchema(etag: store.schemaETag))
@@ -74,6 +89,15 @@ public final class DetourAttribution: DetourAttributionProvider {
             DetourAttributionHost.logWarning("[Detour:ATTRIBUTION] Apple Search Ads token unavailable: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func warnAboutMissingPostbackCopyKeys() {
+        guard let infoDictionary else { return }
+        let missing = Self.missingPostbackCopyKeys(in: infoDictionary)
+        guard !missing.isEmpty else { return }
+        DetourAttributionHost.logWarning(
+            "[Detour:ATTRIBUTION] Info.plist has no \(missing.joined(separator: ", ")), so Detour gets no copies of winning postbacks. See Attribution in the README."
+        )
     }
 
     // On the first launch with consent, so the install counts for SKAdNetwork attribution. Marked
