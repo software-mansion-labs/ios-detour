@@ -26,7 +26,7 @@ final class AnalyticsEmitter {
         let snapshot = Array(listeners.values)
 
         if snapshot.isEmpty {
-            DetourLogger.warn(Self.tag, "[Detour:ANALYTICS] Analytics not started - call Detour.shared.start() (or resolveInitialLink) first")
+            DetourLogger.warn(Self.tag, "[Detour:ANALYTICS] Analytics not set up - call Detour.shared.configure (or resolveInitialLink) first")
             return
         }
 

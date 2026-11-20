@@ -179,13 +179,19 @@ let config = DetourConfig(
 
 </details>
 
-### Starting after consent
+### Starting only after consent
 
-`resolveInitialLink` configures and starts the SDK in one call. If your app collects consent first, split it: `configure` sets the SDK up, and `start` begins analytics, sessions and deferred link matching. Links the user taps before `start` are routed and counted: the SDK sends the link click (link URL, app version, OS version, device model), because your plan's click limit applies to it. A deferred link is matched and passed to the `resolveInitialLink` completion once `start` runs.
+`resolveInitialLink` configures and starts the SDK in one call. To wait for consent, `setConsent` is usually enough: analytics follows the consent gate described below, and with attribution on the first deferred link match waits for the choice on `attribution`. Split the call only if the law that applies to you requires consent before anything else leaves the device, deferred link matching included: `configure` sets the SDK up, and `start` begins analytics, sessions and deferred link matching. Events and conversions you log before `start` are kept in memory (up to 100) and sent after it, if consent to `analytics` allows. Links the user taps before `start` are routed and counted: the SDK sends the link click (link URL, app version, OS version, device model), because your plan's click limit applies to it.
+
+When the deferred link waits for `start` or for consent, the `resolveInitialLink` completion comes only after it. If your app holds its UI until the initial link is handled, wait for `onLinkProcessed` instead: it is called once, before the completion or before the SDK starts waiting, so you can show your consent prompt. A deferred link found after that still arrives in the completion.
 
 ```swift
 Detour.shared.configure(config, autoStart: false)
-Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+Detour.shared.resolveInitialLink(
+    config: config,
+    launchOptions: launchOptions,
+    onLinkProcessed: { showFirstScreen() }
+) { result in
     // handle result.link
 }
 
@@ -193,7 +199,7 @@ Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) {
 Detour.shared.start()
 ```
 
-To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. The call is cheap: without a `timestamp`, a choice the Detour server already has is not sent again. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start` only after it.
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. The call is cheap: without a `timestamp`, a choice the Detour server already has is not sent again. Purposes are strings (`DetourPurpose.analytics` and others), and a purpose missing from the map is not granted. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice, except with attribution on: then the first match waits for the choice on `attribution`. If your users' consent is needed for the match itself, call `start` only after it.
 
 ```swift
 Detour.shared.setConsent(
@@ -212,6 +218,53 @@ To turn the SDK off for a user, call `setEnabled(false)`. It stays off across la
 Detour.shared.setEnabled(false)
 ```
 
+To check your consent integration, call `getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose whether a request goes out now (`.send`), waits for consent (`.wait`) or is dropped (`.drop`). In debug builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
+
+```swift
+let status = Detour.shared.getStatus()
+// isStarted: true, isEnabled: true, hasConsentThisLaunch: true, purposes: ["analytics": .send, "attribution": .drop, ...]
+```
+
+### Consent at a glance
+
+Pass the user's choice on every launch, as soon as your consent platform has it:
+
+```swift
+// cmp is your consent platform.
+Detour.shared.configure(config, attribution: DetourAttribution())
+Detour.shared.resolveInitialLink(
+    config: config,
+    launchOptions: launchOptions,
+    onLinkProcessed: { showFirstScreen() }
+) { result in
+    // handle result.link
+}
+
+cmp.onChoice { choice in
+    Detour.shared.setConsent(DetourConsent(
+        purposes: [
+            DetourPurpose.analytics: choice.analytics,
+            DetourPurpose.attribution: choice.marketing,
+            DetourPurpose.adNetworkSharing: choice.marketing,
+        ],
+        timestamp: choice.decidedAt
+    ))
+}
+```
+
+The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.analytics` purpose, attribution data the `DetourPurpose.attribution` purpose. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
+
+| Request | Before `start()` | No choice yet, gate `closed` | Purpose refused | `setEnabled(false)` |
+| --- | --- | --- | --- | --- |
+| Deferred link match | Waits | Sent. With attribution on, waits for the choice on `DetourPurpose.attribution` | Sent (as `core` if `DetourPurpose.attribution` is refused) | Dropped. On Android a click ID from the Play install referrer still matches, without device data |
+| Click on a link the user taps | Sent | Sent | Sent | Dropped; the link is still routed |
+| `app_open` and sessions | Start with `start()` | Wait in memory (up to 100) | Dropped | Dropped |
+| Your events and conversions | Wait in memory (up to 100) | Wait in memory (up to 100) | Dropped | Dropped |
+| Attribution data (`X-SDK-Package: mmp`, Apple Search Ads token, SKAdNetwork values, Meta Install Referrer) | Wait | Wait | Not sent; requests go as `core` | Not sent |
+| Consent record from `setConsent` | Sent | Sent | Sent | Not sent |
+
+`start()` matters only if you turned the automatic start off (`autoStart: false`), which only a law that requires consent for deferred link matching asks for. `DetourAttribution()` comes from the `DetourAttribution` product; leave it out if you do not use attribution. Check what the SDK does at any moment with `Detour.shared.getStatus()`.
+
 ### Attribution
 
 The `DetourAttribution` product attributes installs and conversions to your ad campaigns. Pass it to `configure`:
@@ -220,8 +273,12 @@ The `DetourAttribution` product attributes installs and conversions to your ad c
 import Detour
 import DetourAttribution
 
-Detour.shared.configure(config, attribution: DetourAttribution(), autoStart: false)
-Detour.shared.resolveInitialLink(config: config, launchOptions: launchOptions) { result in
+Detour.shared.configure(config, attribution: DetourAttribution())
+Detour.shared.resolveInitialLink(
+    config: config,
+    launchOptions: launchOptions,
+    onLinkProcessed: { showFirstScreen() }
+) { result in
     // handle result.link
 }
 
@@ -230,7 +287,6 @@ Detour.shared.setConsent(DetourConsent(purposes: [
     DetourPurpose.analytics: true,
     DetourPurpose.attribution: true,
 ]))
-Detour.shared.start()
 ```
 
 Everything below happens only while the user's consent to `DetourPurpose.attribution` is passed on this launch. Without it, deferred links, analytics and conversions work as without the product, and nothing is attributed to a campaign.
@@ -239,7 +295,7 @@ Everything below happens only while the user's consent to `DetourPurpose.attribu
 - `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The value only goes up.
 - The first deferred link request carries the Apple Search Ads attribution token, so an install from a Search Ads campaign is not counted as organic.
 
-The install is attributed from the first deferred link request, and that request goes once per install. Start the SDK only after the consent answer: with `autoStart: false` and `start()` as above, or with `setConsent` before `configure` when your consent platform already has the choice at launch. If the SDK starts before the answer, that install is never attributed.
+The install is attributed from the first deferred link request, and that request goes once per install. With attribution on, it waits until your app passes the user's choice: after consent to `attribution` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. The completion of `resolveInitialLink` comes only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). Registration for SKAdNetwork also waits for the choice.
 
 Your app needs no ad network identifiers for its installs to be attributed: `SKAdNetworkItems` belongs in apps that display ads, not in the app being advertised. Apple sends each winning postback to the ad network. To let Detour receive a copy of it, add both keys to your app's `Info.plist`:
 

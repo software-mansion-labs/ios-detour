@@ -32,8 +32,16 @@ final class SdkConfigTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    func testFallbackOpensOnlyAnalytics() {
+    func testEveryGateIsClosedUntilTheFirstFetchEnds() {
         let store = SdkConfigStore(defaults: defaults)
+        XCTAssertFalse(store.isKnown)
+        XCTAssertEqual(store.current.gateDefault(for: "analytics"), .closed)
+    }
+
+    func testAFailedFirstFetchFallsBackToOpenAnalyticsOnly() {
+        let store = SdkConfigStore(defaults: defaults)
+        store.apply(.failed, appID: "app")
+        XCTAssertTrue(store.isKnown)
         XCTAssertEqual(store.current.gateDefault(for: "analytics"), .open)
         XCTAssertEqual(store.current.gateDefault(for: "attribution"), .closed)
     }
@@ -54,7 +62,7 @@ final class SdkConfigTests: XCTestCase {
 
         let store = SdkConfigStore(defaults: defaults)
         store.load(appID: "app")
-        XCTAssertEqual(store.current, .fallback)
+        XCTAssertFalse(store.isKnown)
         XCTAssertNil(store.etag)
     }
 

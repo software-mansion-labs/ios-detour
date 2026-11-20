@@ -89,13 +89,21 @@ enum GateDecision: Equatable {
 enum ConsentGate {
     @MainActor
     static func decision(for purpose: String) -> GateDecision {
-        decision(
+        let storedConsent = ConsentStore.stored
+        let result = decision(
             for: purpose,
             isEnabled: InstallStore.shared.isEnabled,
             consentPassedThisLaunch: ConsentStore.passedThisLaunch,
-            storedConsent: ConsentStore.stored,
+            storedConsent: storedConsent,
             gateDefault: SdkConfigStore.shared.current.gateDefault(for: purpose)
         )
+        if result == .wait, storedConsent?.purposes[purpose] == true {
+            ConsentWarnings.warnOnce(
+                "storedGrantNotPassed",
+                "A consent to \(purpose) from an earlier launch does not count until setConsent passes it again on this launch."
+            )
+        }
+        return result
     }
 
     // PROVISIONAL: the stricter cold start rule until the legal answer. A consent stored on an
