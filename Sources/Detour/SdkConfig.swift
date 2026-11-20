@@ -59,7 +59,18 @@ final class SdkConfigStore {
 
     private let defaults: UserDefaults
     private var cached: Cached?
-    private(set) var current = SdkConfig.fallback
+    private var loaded = SdkConfig.fallback
+    private var hasFetchEnded = false
+
+    // On a first launch nothing is cached, and the fallback opens analytics. Until the first
+    // fetch ends, every gate is closed instead, so an app the server keeps closed sends nothing
+    // before consent.
+    private static let untilFirstFetch = SdkConfig(schemaVersion: SdkConfig.fallback.schemaVersion, consentGateDefaults: [:])
+
+    /// False on a first launch until the first `sdk/config` fetch ends.
+    var isKnown: Bool { cached != nil || hasFetchEnded }
+
+    var current: SdkConfig { isKnown ? loaded : Self.untilFirstFetch }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -73,14 +84,15 @@ final class SdkConfigStore {
               let config = SdkConfig(json: saved.body)
         else { return }
         cached = saved
-        current = config
+        loaded = config
     }
 
     var etag: String? { cached?.etag }
 
-    /// Returns true when the config changed.
+    /// Ends the first fetch whatever its result. Returns true when the config changed.
     @discardableResult
     func apply(_ result: FetchResult, appID: String) -> Bool {
+        hasFetchEnded = true
         guard case let .updated(body, etag) = result, let config = SdkConfig(json: body) else { return false }
 
         let saved = Cached(appID: appID, etag: etag, body: body)
@@ -88,8 +100,8 @@ final class SdkConfigStore {
         if let data = try? JSONEncoder().encode(saved) {
             defaults.set(data, forKey: Self.key)
         }
-        let changed = config != current
-        current = config
+        let changed = config != loaded
+        loaded = config
         return changed
     }
 }

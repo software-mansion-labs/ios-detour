@@ -62,17 +62,56 @@ enum SdkPackage: String {
 enum AttributionMode {
     private(set) static var provider: DetourAttributionProvider?
     private static var isStarted = false
+    private static var waitingForDecision: [() -> Void] = []
 
     static func register(_ provider: DetourAttributionProvider?) {
         self.provider = provider
         isStarted = false
+        waitingForDecision = []
+    }
+
+    /// True while attribution is on and its gate waits for consent.
+    static var isWaitingForConsent: Bool {
+        provider != nil && ConsentGate.decision(for: DetourPurpose.attribution) == .wait
+    }
+
+    // The backend never attributes an install whose first match went as `core`, so with
+    // attribution on that match waits until the gate decides: `mmp` after a grant, `core` after a refusal.
+    /// Runs `work` once the attribution gate stops waiting.
+    static func whenDecided(_ work: @escaping () -> Void) {
+        whenDecided(isWaiting: isWaitingForConsent, work)
+    }
+
+    static func whenDecided(isWaiting: Bool, _ work: @escaping () -> Void) {
+        if isWaiting {
+            waitingForDecision.append(work)
+        } else {
+            work()
+        }
+    }
+
+    /// Called after a consent, config or kill switch change.
+    static func reevaluate() {
+        reevaluate(isWaiting: isWaitingForConsent)
+    }
+
+    static func reevaluate(isWaiting: Bool) {
+        guard !isWaiting else { return }
+        let waiting = waitingForDecision
+        waitingForDecision = []
+        waiting.forEach { $0() }
     }
 
     // `Detour.start()` runs again when analytics are mounted again; the provider starts once.
+    // It starts after the gate decides, so a consent passed after `start()` still registers the
+    // install for SKAdNetwork on this launch.
     static func start(config: DetourConfig) {
         guard !isStarted, let provider else { return }
         isStarted = true
-        provider.didStart(DetourAttributionHost(config: config))
+        whenDecided {
+            guard self.provider === provider else { return }
+            provider.didStart(DetourAttributionHost(config: config))
+        }
     }
 
     /// The package of a request that starts now.

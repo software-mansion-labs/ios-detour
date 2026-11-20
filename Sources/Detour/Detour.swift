@@ -36,6 +36,7 @@ public class Detour {
             applyUserIdValidator(config.userIdValidator)
             _ = InstallStore.shared.deviceID
             SdkConfigStore.shared.load(appID: config.appID)
+            DetourAnalytics.shared.prepare(config: config)
             refreshSdkConfig(config)
             killSwitchReporter = KillSwitchReporter(store: .shared) { enabled, date in
                 await SdkNetwork.sendKillSwitch(
@@ -71,14 +72,16 @@ public class Detour {
     }
 
     // Once per launch, so a value changed on the server reaches the app on its next launch.
+    // shortcut: with the SDK off, the first launch never fetches, so its gates stay closed until the
+    // next launch even after setEnabled(true); fetch in setEnabled too if that case matters.
     private func refreshSdkConfig(_ config: DetourConfig) {
         guard InstallStore.shared.isEnabled else { return }
         Task {
             let store = SdkConfigStore.shared
             let result = await SdkNetwork.fetchConfig(config: config, sdkPackage: AttributionMode.sdkPackage, etag: store.etag)
-            if store.apply(result, appID: config.appID) {
-                DetourAnalytics.shared.reevaluateWaiting()
-            }
+            store.apply(result, appID: config.appID)
+            // Also when nothing changed: on a first launch the gates waited for this fetch.
+            consentInputsChanged()
         }
     }
 
@@ -94,7 +97,8 @@ public class Detour {
             consent.schemaVersion = SdkConfigStore.shared.current.schemaVersion
         }
         let toSend = ConsentStore.record(consent, deviceID: InstallStore.shared.deviceID)
-        DetourAnalytics.shared.reevaluateWaiting()
+        warnAboutConsentPitfalls(consent)
+        consentInputsChanged()
 
         guard let toSend else { return }
         if let config {
@@ -102,6 +106,56 @@ public class Detour {
         } else {
             consentToSend = (toSend, consentText)
         }
+    }
+
+    /// Decides again what waited for consent, the server config or the kill switch.
+    private func consentInputsChanged() {
+        DetourAnalytics.shared.reevaluateWaiting()
+        AttributionMode.reevaluate()
+    }
+
+    // PROVISIONAL: how long after setConsent the SDK expects start() before it warns.
+    static let startAfterConsentGraceNanoseconds: UInt64 = 5_000_000_000
+
+    private func warnAboutConsentPitfalls(_ consent: DetourConsent) {
+        if consent.purposes[DetourPurpose.analytics] == nil {
+            ConsentWarnings.warnOnce(
+                "consentWithoutAnalytics",
+                "setConsent has no analytics key, so analytics stops: a purpose missing from the map is not granted."
+            )
+        }
+        guard ConsentWarnings.isDevelopment, !isStarted else { return }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.startAfterConsentGraceNanoseconds)
+            guard let self, !self.isStarted else { return }
+            ConsentWarnings.warnOnce(
+                "consentWithoutStart",
+                "setConsent was called, but start() was not. With autoStart: false, analytics and deferred link matching wait for it."
+            )
+        }
+    }
+
+    /// What the SDK does now: started, enabled, consent on this launch, and each purpose's decision.
+    public func getStatus() -> DetourStatus {
+        let passed = ConsentStore.passedThisLaunch
+        var purposeIDs: Set<String> = [
+            DetourPurpose.analytics, DetourPurpose.attribution,
+            DetourPurpose.adNetworkSharing, DetourPurpose.adPersonalization,
+        ]
+        purposeIDs.formUnion(SdkConfigStore.shared.current.consentGateDefaults.keys)
+        if let passed {
+            purposeIDs.formUnion(passed.purposes.keys)
+        }
+        var purposes: [String: DetourStatus.Decision] = [:]
+        for purpose in purposeIDs {
+            purposes[purpose] = DetourStatus.Decision(ConsentGate.decision(for: purpose))
+        }
+        return DetourStatus(
+            isStarted: isStarted,
+            isEnabled: InstallStore.shared.isEnabled,
+            hasConsentThisLaunch: passed != nil,
+            purposes: purposes
+        )
     }
 
     private func sendConsent(_ consent: DetourConsent, text: String?, config: DetourConfig) {
@@ -124,7 +178,7 @@ public class Detour {
     public func setEnabled(_ enabled: Bool) {
         guard InstallStore.shared.setEnabled(enabled, at: Date()) else { return }
         // Drops what waited for consent when the SDK goes off.
-        DetourAnalytics.shared.reevaluateWaiting()
+        consentInputsChanged()
         killSwitchReporter?.sync()
     }
 
@@ -307,34 +361,48 @@ public class Detour {
         connectionOptions.userActivities.filter { $0.activityType == NSUserActivityTypeBrowsingWeb }
     }
 
+    // `finish` also reports the link processed; `report` alone is for the wait before the match.
     private func resolveDeferredInitialLink(
         config: DetourConfig,
-        completion: @escaping @Sendable (DetourResult) -> Void
+        report: LinkProcessedReport,
+        finish: @escaping @MainActor @Sendable (DetourResult) -> Void
     ) {
         if !InstallStore.shared.isFirstLaunch {
             DetourLogger.debug(tag, "Not first launch")
             isSessionHandled = true
-            completion(.empty())
+            finish(.empty())
             return
         }
 
-        // The first-launch flag is stored only when matching runs, so an app closed before
-        // `start()` still matches on its next launch.
+        // Reported first, so an app that holds its UI until then can still ask for consent. The
+        // first-launch flag is stored only when matching runs, so an app closed before `start()`
+        // or before the consent decision still matches on its next launch.
         isSessionHandled = true
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
+        if !isStarted || AttributionMode.isWaitingForConsent {
+            report.processed()
+        }
         whenStarted { [weak self] in
-            self?.matchDeferredLink(config: config, completion: completion)
+            if AttributionMode.isWaitingForConsent {
+                ConsentWarnings.warnOnce(
+                    "firstMatchWaits",
+                    "The first deferred link match waits for consent to attribution. Pass it with setConsent."
+                )
+            }
+            AttributionMode.whenDecided { [weak self] in
+                self?.matchDeferredLink(config: config, finish: finish)
+            }
         }
     }
 
     private func matchDeferredLink(
         config: DetourConfig,
-        completion: @escaping @Sendable (DetourResult) -> Void
+        finish: @escaping @MainActor @Sendable (DetourResult) -> Void
     ) {
         markSessionHandled()
         guard InstallStore.shared.isEnabled else {
             DetourLogger.debug(tag, "SDK disabled; deferred link matching skipped")
-            completion(.empty())
+            finish(.empty())
             return
         }
         DetourLogger.debug(tag, "Using signal-based matching")
@@ -353,7 +421,7 @@ public class Detour {
             ) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
-                        completion(result)
+                        finish(result)
                         return
                     }
 
@@ -363,7 +431,7 @@ public class Detour {
                     } else {
                         DetourLogger.debug(self.tag, "Deferred link matched successfully")
                     }
-                    completion(filteredResult)
+                    finish(filteredResult)
                 }
             }
         }
@@ -413,111 +481,111 @@ public class Detour {
         return DetourResult(processed: true, link: resolvedLink)
     }
     
+    /// Routes the link the app was opened with, or matches the deferred link on the first launch,
+    /// and passes it to `completion`. `onLinkProcessed` is called once, before the
+    /// completion or before the SDK starts waiting for `start()` or for consent to attribution,
+    /// so an app that holds its UI until then can show its consent prompt; a deferred link found
+    /// after that still arrives in `completion`.
     public func resolveInitialLink(
-            config: DetourConfig,
-            launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
-            completion: @escaping @Sendable (DetourResult) -> Void
-        ) {
-            mountAnalytics(config: config)
-            
-            func returnEmpty() { completion(.empty()) }
-            
-            if isSessionHandled {
-                DetourLogger.debug(tag, "Session already handled")
-                returnEmpty()
-                return
-            }
-            
-            if config.linkProcessingMode != .deferredOnly {
-                if let launchURL = launchOptions?[.url] as? URL,
-                   !LinkUtils.isInfrastructureUrl(launchURL.absoluteString)
-                {
-                    DetourLogger.debug(tag, "Processing launch URL")
-                    markSessionHandled()
-                    Task {
-                        let result = await processLink(launchURL.absoluteString, config: config)
-                        completion(result)
-                    }
-                    return
-                }
+        config: DetourConfig,
+        launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
+        onLinkProcessed: (@MainActor () -> Void)? = nil,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        resolveInitialLink(
+            config: config,
+            openURL: launchOptions?[.url] as? URL,
+            activities: browsingWebActivities(from: launchOptions),
+            report: LinkProcessedReport(onLinkProcessed),
+            completion: completion
+        )
+    }
 
-                let activities = browsingWebActivities(from: launchOptions)
-                if let universalURL = activities.compactMap(\.webpageURL).first,
-                   !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
-                {
-                    DetourLogger.debug(tag, "Processing Universal Link")
-                    markSessionHandled()
-                    Task {
-                        let result = await processLink(universalURL, config: config)
-                        completion(result)
-                    }
-                    return
-                }
-
-                if !activities.isEmpty {
-                    DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
-                    markSessionHandled()
-                    // UIApplicationDelegate will invoke continueUserActivity next.
-                    returnEmpty()
-                    return
-                }
-            }
-
-            DetourLogger.debug(tag, "Falling back to deferred link resolution")
-            resolveDeferredInitialLink(config: config, completion: completion)
-        }
-
+    /// The scene version of `resolveInitialLink(config:launchOptions:onLinkProcessed:completion:)`.
     public func resolveInitialLink(
         config: DetourConfig,
         connectionOptions: UIScene.ConnectionOptions,
+        onLinkProcessed: (@MainActor () -> Void)? = nil,
+        completion: @escaping @Sendable (DetourResult) -> Void
+    ) {
+        resolveInitialLink(
+            config: config,
+            openURL: connectionOptions.urlContexts.first?.url,
+            activities: browsingWebActivities(from: connectionOptions),
+            report: LinkProcessedReport(onLinkProcessed),
+            completion: completion
+        )
+    }
+
+    private func resolveInitialLink(
+        config: DetourConfig,
+        openURL: URL?,
+        activities: [NSUserActivity],
+        report: LinkProcessedReport,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         mountAnalytics(config: config)
 
-        func returnEmpty() { completion(.empty()) }
+        let finish: @MainActor @Sendable (DetourResult) -> Void = { result in
+            report.processed()
+            completion(result)
+        }
 
         if isSessionHandled {
             DetourLogger.debug(tag, "Session already handled")
-            returnEmpty()
+            finish(.empty())
             return
         }
 
         if config.linkProcessingMode != .deferredOnly {
-            if let openURL = connectionOptions.urlContexts.first?.url,
-               !LinkUtils.isInfrastructureUrl(openURL.absoluteString)
-            {
+            if let openURL, !LinkUtils.isInfrastructureUrl(openURL.absoluteString) {
                 DetourLogger.debug(tag, "Processing launch URL")
                 markSessionHandled()
                 Task {
-                    let result = await processLink(openURL.absoluteString, config: config)
-                    completion(result)
+                    finish(await processLink(openURL.absoluteString, config: config))
                 }
                 return
             }
 
-            let activities = browsingWebActivities(from: connectionOptions)
             if let universalURL = activities.compactMap(\.webpageURL).first,
                !LinkUtils.isInfrastructureUrl(universalURL.absoluteString)
             {
                 DetourLogger.debug(tag, "Processing Universal Link")
                 markSessionHandled()
                 Task {
-                    let result = await processLink(universalURL, config: config)
-                    completion(result)
+                    finish(await processLink(universalURL, config: config))
                 }
                 return
             }
 
             if !activities.isEmpty {
-                DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continue callback")
+                DetourLogger.debug(tag, "Universal Link userActivity detected - awaiting continueUserActivity callback")
                 markSessionHandled()
-                returnEmpty()
+                // UIApplicationDelegate will invoke continueUserActivity next.
+                finish(.empty())
                 return
             }
         }
 
         DetourLogger.debug(tag, "Falling back to deferred link resolution")
-        resolveDeferredInitialLink(config: config, completion: completion)
+        resolveDeferredInitialLink(config: config, report: report, finish: finish)
     }
-    
+
+}
+
+
+/// Calls `onLinkProcessed` once, whichever path gets there first.
+@MainActor
+final class LinkProcessedReport {
+    private var onProcessed: (@MainActor () -> Void)?
+
+    init(_ onProcessed: (@MainActor () -> Void)?) {
+        self.onProcessed = onProcessed
+    }
+
+    func processed() {
+        let pending = onProcessed
+        onProcessed = nil
+        pending?()
+    }
 }

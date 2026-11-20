@@ -44,12 +44,15 @@ final class AttributionModeTests: XCTestCase {
         XCTAssertEqual(AttributionMode.sdkPackage(hasProvider: true, decision: .drop), .core)
     }
 
-    func testTheProviderStartsOnceWhenTheSdkStartsAgain() {
+    func testTheProviderStartsOnceAfterTheAttributionDecision() {
         let config = DetourConfig(apiKey: "key", appID: "app")
 
         AttributionMode.start(config: config)
         AttributionMode.start(config: config)
+        // With no consent and no server config yet, the attribution gate waits.
+        XCTAssertEqual(provider.starts, 0)
 
+        AttributionMode.reevaluate(isWaiting: false)
         XCTAssertEqual(provider.starts, 1)
     }
 

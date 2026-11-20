@@ -42,14 +42,18 @@ public final class DetourAnalytics {
         shared.logConversion(conversion)
     }
 
+    /// Called by `configure`: requests logged before `start()` wait in the consent queue.
+    func prepare(config: DetourConfig) {
+        self.config = config
+        subscribe()
+    }
+
     public func mount(config: DetourConfig) {
         guard !isMounted else { return }
         isMounted = true
         self.config = config
+        subscribe()
 
-        subscriptionToken = AnalyticsEmitter.shared.subscribe { [weak self] payload in
-            self?.deliver(payload)
-        }
         SessionManager.shared.start { [weak self] event in
             Task { @MainActor in self?.deliver(.session(event)) }
         }
@@ -57,6 +61,14 @@ public final class DetourAnalytics {
         if !hasLoggedColdStartRetention {
             logRetention("app_open")
             hasLoggedColdStartRetention = true
+        }
+        reevaluateWaiting()
+    }
+
+    private func subscribe() {
+        guard subscriptionToken == nil else { return }
+        subscriptionToken = AnalyticsEmitter.shared.subscribe { [weak self] payload in
+            self?.deliver(payload)
         }
     }
 
@@ -79,10 +91,18 @@ public final class DetourAnalytics {
     }
 
     private func deliver(_ request: AnalyticsRequest) {
-        switch ConsentGate.decision(for: DetourPurpose.analytics) {
+        // Requests logged before `start()` wait like those of a closed gate; the gate decides them after it.
+        let decision = isMounted ? ConsentGate.decision(for: DetourPurpose.analytics) : .wait
+        switch decision {
         case .send:
             send(request)
         case .wait:
+            if isMounted, SdkConfigStore.shared.isKnown {
+                ConsentWarnings.warnOnce(
+                    "analyticsWaitsForConsent",
+                    "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch."
+                )
+            }
             if waitingForConsent.count < Self.maxWaitingForConsent {
                 waitingForConsent.append(request)
             }
