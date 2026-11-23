@@ -6,7 +6,7 @@ final class SessionManager: @unchecked Sendable {
     static let shared = SessionManager()
 
     // PROVISIONAL: more than 30 min in the background starts a new session, the threshold Google
-    // Analytics and Adjust use, until the API contract settles on an SDK constant or a server value.
+    // Analytics and Adjust use.
     static let backgroundTimeout: TimeInterval = 30 * 60
 
     enum Event: Equatable {

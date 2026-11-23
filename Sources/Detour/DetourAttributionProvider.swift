@@ -27,8 +27,8 @@ public final class DetourAttributionHost {
         self.config = config
     }
 
-    // PROVISIONAL: SKAdNetwork and AdAttributionKit wait for consent to attribution, like the `mmp`
-    // package, until the legal answer on whether those APIs need it.
+    // PROVISIONAL: SKAdNetwork and AdAttributionKit wait for consent to attribution, like requests
+    // sent with attribution on.
     /// True while consent to `DetourPurpose.attribution` passed on this launch lets requests through.
     public var isAttributionAllowed: Bool {
         ConsentGate.decision(for: DetourPurpose.attribution) == .send

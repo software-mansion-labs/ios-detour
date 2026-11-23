@@ -108,7 +108,7 @@ public class Detour {
         }
     }
 
-    /// Decides again what waited for consent, the server config or the kill switch.
+    /// Checks again the requests that wait, after consent, the server config or the kill switch changed.
     private func consentInputsChanged() {
         DetourAnalytics.shared.reevaluateWaiting()
         AttributionMode.reevaluate()
@@ -138,10 +138,7 @@ public class Detour {
     /// What the SDK does now: started, enabled, consent on this launch, and each purpose's decision.
     public func getStatus() -> DetourStatus {
         let passed = ConsentStore.passedThisLaunch
-        var purposeIDs: Set<String> = [
-            DetourPurpose.analytics, DetourPurpose.attribution,
-            DetourPurpose.adNetworkSharing, DetourPurpose.adPersonalization,
-        ]
+        var purposeIDs = DetourPurpose.builtIn
         purposeIDs.formUnion(SdkConfigStore.shared.current.consentGateDefaults.keys)
         if let passed {
             purposeIDs.formUnion(passed.purposes.keys)
@@ -461,10 +458,10 @@ public class Detour {
     public func processLink(_ url: URL, config: DetourConfig?) async -> DetourResult {
         // The click is Detour's measurement, not routing, so the kill switch stops it.
         if LinkUtils.detectLinkType(from: url) == .verified, let config, InstallStore.shared.isEnabled {
-            let clickResult = await DetourNetwork.sendUniversalLinkClick(
+            let isAllowed = await DetourNetwork.sendUniversalLinkClick(
                 config: config, sdkPackage: AttributionMode.sdkPackage, url: url.absoluteString
             )
-            if !clickResult.allowed {
+            if !isAllowed {
                 return .empty()
             }
         }

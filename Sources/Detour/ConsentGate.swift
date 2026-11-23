@@ -106,7 +106,7 @@ enum ConsentGate {
         return result
     }
 
-    // PROVISIONAL: the stricter cold start rule until the legal answer. A consent stored on an
+    // PROVISIONAL: the stricter cold start rule. A consent stored on an
     // earlier launch can only block: the user may have withdrawn it in the consent platform since,
     // so a grant counts only once the app passes it again on this launch.
     static func decision(
