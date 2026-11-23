@@ -76,6 +76,8 @@ public final class DetourAttribution: DetourAttributionProvider {
             // Stored only once SKAdNetwork took it, so a failed value is sent again by the next conversion.
             if await updater.update(fine: rule.fine, coarse: rule.coarse, lock: rule.lock ?? false) {
                 store.raiseHighestFine(to: rule.fine, installID: installID)
+                // A taken value registers the app too; a later registration would send 0 over it.
+                store.markRegistered(installID: installID)
             }
         }
     }

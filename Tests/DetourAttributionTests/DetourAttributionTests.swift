@@ -191,6 +191,23 @@ final class DetourAttributionRegistrationTests: XCTestCase {
         XCTAssertEqual(updater.calls, ["register", "register", "update 12"])
     }
 
+    func testATakenValueRegistersTheAppSoTheNextLaunchDoesNotSendZero() async {
+        let updater = FakeUpdater(registerResults: [false, false, false])
+        DetourAttribution(store: store, updater: updater).start(with: FakeHost())
+        await settle()
+        let attribution = DetourAttribution(store: store, updater: updater)
+        attribution.start(with: FakeHost())
+        await settle()
+        attribution.didLogConversion(purchase)
+        await settle()
+        XCTAssertEqual(updater.updates, [12])
+
+        DetourAttribution(store: store, updater: updater).start(with: FakeHost())
+        await settle()
+        XCTAssertEqual(updater.registrations, 3)
+        XCTAssertEqual(updater.updates, [12])
+    }
+
     func testAValueSKAdNetworkRejectedIsSentAgain() async {
         let updater = FakeUpdater(registerResults: [], updateResults: [false, true])
         let attribution = DetourAttribution(store: store, updater: updater)
