@@ -34,8 +34,7 @@ enum DetourEndpoints {
         guard let configured, configured != defaultBaseURL else { return defaultBaseURL }
 
         let isValid = configured.scheme?.lowercased() == "https" && configured.host?.isEmpty == false
-        // PROVISIONAL: logged once per process on the first request because the SDK has no explicit
-        // start step yet; move it there once one exists.
+        // Logged once per process, on the first request for this base URL.
         reportOnce(configured) {
             if isValid {
                 DetourLogger.warn(tag, "[Detour:CONFIG] Using custom baseURL \(configured.absoluteString). Remove it before releasing to production.")

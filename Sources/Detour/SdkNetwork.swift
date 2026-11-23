@@ -22,6 +22,8 @@ enum SdkNetwork {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        // With attribution on, the first deferred match waits for the first config fetch.
+        request.timeoutInterval = 15
         DetourNetwork.applyHeaders(to: &request, config: config, sdkPackage: sdkPackage)
         if let etag {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")

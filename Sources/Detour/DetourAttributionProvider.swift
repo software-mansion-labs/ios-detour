@@ -27,8 +27,8 @@ public final class DetourAttributionHost {
         self.config = config
     }
 
-    // PROVISIONAL: SKAdNetwork and AdAttributionKit wait for consent to attribution, like the `mmp`
-    // package, until the legal answer on whether those APIs need it.
+    // PROVISIONAL: SKAdNetwork and AdAttributionKit wait for consent to attribution, like requests
+    // sent with attribution on.
     /// True while consent to `DetourPurpose.attribution` passed on this launch lets requests through.
     public var isAttributionAllowed: Bool {
         ConsentGate.decision(for: DetourPurpose.attribution) == .send
@@ -60,14 +60,22 @@ enum SdkPackage: String {
 /// Attribution mode: on once the app passes a provider to `configure`.
 @MainActor
 enum AttributionMode {
+    // PROVISIONAL: the same cap as events waiting for consent, so an app that never passes the
+    // choice cannot grow the queue without bound.
+    private static let maxWaitingConversions = 100
+
     private(set) static var provider: DetourAttributionProvider?
     private static var isStarted = false
+    private static var hasProviderStarted = false
     private static var waitingForDecision: [() -> Void] = []
+    private static var waitingConversions: [DetourConversion] = []
 
     static func register(_ provider: DetourAttributionProvider?) {
         self.provider = provider
         isStarted = false
+        hasProviderStarted = false
         waitingForDecision = []
+        waitingConversions = []
     }
 
     /// True while attribution is on and its gate waits for consent.
@@ -96,6 +104,7 @@ enum AttributionMode {
     }
 
     static func reevaluate(isWaiting: Bool) {
+        flushConversions()
         guard !isWaiting else { return }
         let waiting = waitingForDecision
         waitingForDecision = []
@@ -111,6 +120,8 @@ enum AttributionMode {
         whenDecided {
             guard self.provider === provider else { return }
             provider.didStart(DetourAttributionHost(config: config))
+            hasProviderStarted = true
+            flushConversions()
         }
     }
 
@@ -142,13 +153,25 @@ enum AttributionMode {
         }
     }
 
+    // A conversion logged before `start()` or while the gate waits is kept until the provider starts,
+    // so a purchase made before the consent prompt is answered still counts for SKAdNetwork.
     static func forwardConversion(_ conversion: DetourConversion) {
-        forwardConversion(conversion, decision: ConsentGate.decision(for: DetourPurpose.attribution))
+        guard provider != nil, waitingConversions.count < maxWaitingConversions else { return }
+        waitingConversions.append(conversion)
+        flushConversions()
     }
 
-    static func forwardConversion(_ conversion: DetourConversion, decision: GateDecision) {
-        guard decision == .send else { return }
-        provider?.didLogConversion(conversion)
+    private static func flushConversions() {
+        flushConversions(decision: ConsentGate.decision(for: DetourPurpose.attribution))
+    }
+
+    static func flushConversions(decision: GateDecision) {
+        guard hasProviderStarted, let provider, decision != .wait else { return }
+        let waiting = waitingConversions
+        waitingConversions = []
+        if decision == .send {
+            waiting.forEach { provider.didLogConversion($0) }
+        }
     }
 }
 

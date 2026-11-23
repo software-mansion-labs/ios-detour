@@ -12,8 +12,8 @@ struct SdkConfig: Equatable {
     let schemaVersion: Int
     let consentGateDefaults: [String: ConsentGateDefault]
 
-    // The only gate values written in the SDK, used before the first successful fetch
-    // (API contract, consent gate fallback). Every other value comes from the server.
+    // The only gate values written in the SDK, used when the first fetch failed and nothing is
+    // cached. Until that fetch ends every gate is closed; every other value comes from the server.
     static let fallback = SdkConfig(
         schemaVersion: 1,
         consentGateDefaults: [DetourPurpose.analytics: .open]
@@ -46,8 +46,6 @@ struct SdkConfig: Equatable {
 @MainActor
 final class SdkConfigStore {
     static let shared = SdkConfigStore()
-
-    typealias FetchResult = DetourFetchResult
 
     private struct Cached: Codable {
         let appID: String
@@ -89,19 +87,16 @@ final class SdkConfigStore {
 
     var etag: String? { cached?.etag }
 
-    /// Ends the first fetch whatever its result. Returns true when the config changed.
-    @discardableResult
-    func apply(_ result: FetchResult, appID: String) -> Bool {
+    /// Ends the first fetch whatever its result.
+    func apply(_ result: DetourFetchResult, appID: String) {
         hasFetchEnded = true
-        guard case let .updated(body, etag) = result, let config = SdkConfig(json: body) else { return false }
+        guard case let .updated(body, etag) = result, let config = SdkConfig(json: body) else { return }
 
         let saved = Cached(appID: appID, etag: etag, body: body)
         cached = saved
         if let data = try? JSONEncoder().encode(saved) {
             defaults.set(data, forKey: Self.key)
         }
-        let changed = config != loaded
         loaded = config
-        return changed
     }
 }

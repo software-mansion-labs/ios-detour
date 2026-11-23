@@ -13,8 +13,8 @@ struct ConversionValueSchema: Decodable, Equatable {
     struct Rule: Decodable, Equatable {
         struct Condition: Decodable, Equatable {
             let revenueGte: Decimal?
-            // PROVISIONAL: the currency sits in the rule's condition (decision of 05.11); the
-            // contract still lists one currency for the whole schema as an open question.
+            // PROVISIONAL: each rule's condition has its own currency; one currency for the whole
+            // schema is still possible.
             let currency: String?
             let countGte: Int?
 

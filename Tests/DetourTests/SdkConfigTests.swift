@@ -48,7 +48,7 @@ final class SdkConfigTests: XCTestCase {
 
     func testServerValuesReplaceTheFallbackAndSurviveRelaunch() {
         let store = SdkConfigStore(defaults: defaults)
-        XCTAssertTrue(store.apply(.updated(body: Self.body, etag: "\"v1\""), appID: "app"))
+        store.apply(.updated(body: Self.body, etag: "\"v1\""), appID: "app")
         XCTAssertEqual(store.current.gateDefault(for: "analytics"), .closed)
 
         let relaunched = SdkConfigStore(defaults: defaults)
@@ -70,8 +70,8 @@ final class SdkConfigTests: XCTestCase {
         let store = SdkConfigStore(defaults: defaults)
         store.apply(.updated(body: Self.body, etag: "\"v1\""), appID: "app")
 
-        XCTAssertFalse(store.apply(.notModified, appID: "app"))
-        XCTAssertFalse(store.apply(.failed, appID: "app"))
+        store.apply(.notModified, appID: "app")
+        store.apply(.failed, appID: "app")
         XCTAssertEqual(store.current.gateDefault(for: "analytics"), .closed)
         XCTAssertEqual(store.etag, "\"v1\"")
     }
@@ -79,7 +79,7 @@ final class SdkConfigTests: XCTestCase {
     func testBodyInAnUnexpectedShapeIsIgnored() {
         let store = SdkConfigStore(defaults: defaults)
         let unexpected = Data(#"{"schema_version": 1, "consent_gate_default": "open"}"#.utf8)
-        XCTAssertFalse(store.apply(.updated(body: unexpected, etag: nil), appID: "app"))
+        store.apply(.updated(body: unexpected, etag: nil), appID: "app")
         XCTAssertEqual(store.current, .fallback)
     }
 

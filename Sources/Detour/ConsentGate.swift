@@ -89,26 +89,30 @@ enum GateDecision: Equatable {
 enum ConsentGate {
     @MainActor
     static func decision(for purpose: String) -> GateDecision {
-        let storedConsent = ConsentStore.stored
-        let result = decision(
+        decision(
             for: purpose,
             isEnabled: InstallStore.shared.isEnabled,
             consentPassedThisLaunch: ConsentStore.passedThisLaunch,
-            storedConsent: storedConsent,
+            storedConsent: ConsentStore.stored,
             gateDefault: SdkConfigStore.shared.current.gateDefault(for: purpose)
         )
-        if result == .wait, storedConsent?.purposes[purpose] == true {
-            ConsentWarnings.warnOnce(
-                "storedGrantNotPassed",
-                "A consent to \(purpose) from an earlier launch does not count until setConsent passes it again on this launch."
-            )
-        }
-        return result
     }
 
-    // PROVISIONAL: the stricter cold start rule until the legal answer. A consent stored on an
-    // earlier launch can only block: the user may have withdrawn it in the consent platform since,
-    // so a grant counts only once the app passes it again on this launch.
+    /// For the places that hold a request back while the gate waits. Warns and returns true when a
+    /// grant stored on an earlier launch is why it waits.
+    @MainActor
+    static func warnIfStoredGrantWaits(_ purpose: String) -> Bool {
+        guard ConsentStore.stored?.purposes[purpose] == true else { return false }
+        ConsentWarnings.warnOnce(
+            "storedGrantNotPassed",
+            "A consent to \(purpose) from an earlier launch does not count until setConsent passes it again on this launch."
+        )
+        return true
+    }
+
+    // PROVISIONAL: the stricter cold start rule. A consent stored on an earlier launch can only
+    // block: the user may have withdrawn it in the consent platform since, so a grant counts only
+    // once the app passes it again on this launch.
     static func decision(
         for purpose: String,
         isEnabled: Bool,

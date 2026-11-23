@@ -1,6 +1,6 @@
 import Foundation
 
-/// Reports the kill switch state to the server until it is confirmed (API contract, kill switch).
+/// Reports the kill switch state to the server until it is confirmed.
 /// One request at a time, each given up to 60 s, so an older state never lands after a newer
 /// one: the server keeps the state that arrived last. An unconfirmed state is sent again on the
 /// next launch, because a lost "off" would leave the install in ad network postbacks.

@@ -11,6 +11,8 @@ public enum DetourPurpose {
     public static let adNetworkSharing = "ad_network_sharing"
     /// Ad personalization, for example Google's `ad_personalization`.
     public static let adPersonalization = "ad_personalization"
+
+    static let builtIn: Set<String> = [analytics, attribution, adNetworkSharing, adPersonalization]
 }
 
 /// The user's choice from your consent platform, passed with `Detour.shared.setConsent`.
@@ -54,7 +56,7 @@ public struct DetourConsent: Sendable, Equatable {
     }
 }
 
-// The wire format of the API contract, also used to store the consent on the device.
+// The wire format of the API, also used to store the consent on the device.
 extension DetourConsent: Codable {
     private enum CodingKeys: String, CodingKey {
         case purposes, timestamp, region, source

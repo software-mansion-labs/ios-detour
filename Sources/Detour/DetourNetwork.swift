@@ -192,9 +192,10 @@ class DetourNetwork {
         }
     }
 
-    static func sendUniversalLinkClick(config: DetourConfig, sdkPackage: SdkPackage, url: String, linkId: String? = nil) async -> (allowed: Bool, clickId: String?) {
+    /// False only when the server denies the click, for example over the plan's click limit.
+    static func sendUniversalLinkClick(config: DetourConfig, sdkPackage: SdkPackage, url: String) async -> Bool {
         guard let endpoint = DetourEndpoints.url(.universalLinkClick, config: config) else {
-            return (allowed: true, clickId: nil)  // fail-open
+            return true  // fail-open
         }
 
         struct Metadata: Encodable {
@@ -204,7 +205,6 @@ class DetourNetwork {
         }
 
         struct RequestBody: Encodable {
-            let link_id: String?
             let url: String
             let timestamp: Int64
             let platform: String
@@ -212,12 +212,11 @@ class DetourNetwork {
             let metadata: Metadata
 
             enum CodingKeys: String, CodingKey {
-                case link_id, url, timestamp, platform, params, metadata
+                case url, timestamp, platform, params, metadata
             }
 
             func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
-                if let id = link_id { try container.encode(id, forKey: .link_id) }
                 try container.encode(url, forKey: .url)
                 try container.encode(timestamp, forKey: .timestamp)
                 try container.encode(platform, forKey: .platform)
@@ -228,12 +227,10 @@ class DetourNetwork {
 
         struct ResponseBody: Decodable {
             let allowed: Bool?
-            let clickId: String?
             let error: String?
             let code: String?
             let clicksInPeriod: Int?
             let effectiveLimit: Int?
-            let remainingClicks: Int?
         }
 
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
@@ -243,7 +240,6 @@ class DetourNetwork {
         let urlParams = parsedParams.isEmpty ? nil : parsedParams
 
         let requestBody = RequestBody(
-            link_id: linkId,
             url: url,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
             platform: "ios",
@@ -256,7 +252,7 @@ class DetourNetwork {
         )
 
         guard let body = try? JSONEncoder().encode(requestBody) else {
-            return (allowed: true, clickId: nil)
+            return true
         }
 
         var request = URLRequest(url: endpoint)
@@ -267,7 +263,7 @@ class DetourNetwork {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return (allowed: true, clickId: nil) }
+            guard let http = response as? HTTPURLResponse else { return true }
 
             let decoded = try? JSONDecoder().decode(ResponseBody.self, from: data)
             let isExplicitDeny = decoded?.allowed == false || http.statusCode == 402
@@ -277,16 +273,16 @@ class DetourNetwork {
                     tag,
                     "[Detour:CLICK_LIMIT_ERROR] Universal link blocked: url=\(url) error=\(decoded?.error ?? "limit exceeded") code=\(decoded?.code ?? "n/a") clicksInPeriod=\(decoded?.clicksInPeriod.map(String.init) ?? "n/a") effectiveLimit=\(decoded?.effectiveLimit.map(String.init) ?? "n/a")"
                 )
-                return (allowed: false, clickId: nil)
+                return false
             }
 
             if !(200...299).contains(http.statusCode) {
-                return (allowed: true, clickId: nil)  // fail-open on backend errors
+                return true  // fail-open on backend errors
             }
 
-            return (allowed: true, clickId: decoded?.clickId)
+            return true
         } catch {
-            return (allowed: true, clickId: nil)  // fail-open on network errors
+            return true  // fail-open on network errors
         }
     }
 }

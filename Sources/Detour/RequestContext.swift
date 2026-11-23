@@ -62,8 +62,7 @@ struct RequestContext: Encodable {
         return version.patchVersion == 0 ? base : "\(base).\(version.patchVersion)"
     }
 
-    // PROVISIONAL: `app_store` / `sandbox` as proposed in the API contract; TestFlight and
-    // development builds both report `sandbox`.
+    // PROVISIONAL: `app_store` / `sandbox` only; TestFlight and development builds both report `sandbox`.
     private static func installSource() -> String? {
         guard let receiptURL = Bundle.main.appStoreReceiptURL else { return nil }
         return receiptURL.lastPathComponent == "sandboxReceipt" ? "sandbox" : "app_store"

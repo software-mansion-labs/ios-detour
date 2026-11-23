@@ -218,7 +218,7 @@ To turn the SDK off for a user, call `setEnabled(false)`. It stays off across la
 Detour.shared.setEnabled(false)
 ```
 
-To check your consent integration, call `getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose whether a request goes out now (`.send`), waits for consent (`.wait`) or is dropped (`.drop`). In debug builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
+To check your consent integration, call `getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose the consent gate's decision (`.send`, `.wait` or `.drop`). Before `start()` requests wait anyway. In debug builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
 
 ```swift
 let status = Detour.shared.getStatus()
@@ -246,13 +246,14 @@ cmp.onChoice { choice in
             DetourPurpose.analytics: choice.analytics,
             DetourPurpose.attribution: choice.marketing,
             DetourPurpose.adNetworkSharing: choice.marketing,
+            DetourPurpose.adPersonalization: choice.marketing,
         ],
         timestamp: choice.decidedAt
     ))
 }
 ```
 
-The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.analytics` purpose, attribution data the `DetourPurpose.attribution` purpose. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
+The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.analytics` purpose, attribution data the `DetourPurpose.attribution` purpose. The Detour backend sends data to ad networks only with consent to `DetourPurpose.adNetworkSharing`, and to Google only with `DetourPurpose.adPersonalization` too, so pass both when your prompt asks for them. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
 
 | Request | Before `start()` | No choice yet, gate `closed` | Purpose refused | `setEnabled(false)` |
 | --- | --- | --- | --- | --- |
@@ -286,14 +287,18 @@ Detour.shared.resolveInitialLink(
 Detour.shared.setConsent(DetourConsent(purposes: [
     DetourPurpose.analytics: true,
     DetourPurpose.attribution: true,
+    DetourPurpose.adNetworkSharing: true,
+    DetourPurpose.adPersonalization: true,
 ]))
 ```
 
 Everything below happens only while the user's consent to `DetourPurpose.attribution` is passed on this launch. Without it, deferred links, analytics and conversions work as without the product, and nothing is attributed to a campaign.
 
 - Requests feed attribution of the install to the ad network click it came from.
-- `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The value only goes up.
+- `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The SDK sends only increases: the highest matching value wins.
 - The first deferred link request carries the Apple Search Ads attribution token, so an install from a Search Ads campaign is not counted as organic.
+
+Sending data to ad networks needs one more purpose. The Detour backend sends an install or a conversion to a network set up for your app only with consent to `DetourPurpose.adNetworkSharing`; Google also needs `DetourPurpose.adPersonalization`. Without it the install is still attributed in Detour, but nothing goes to the network. Your consent prompt has to say this: that data is shared with ad networks (such as Google) and used to personalize ads. SKAdNetwork and AdAttributionKit postbacks are sent by Apple and follow `DetourPurpose.attribution` only.
 
 The install is attributed from the first deferred link request, and that request goes once per install. With attribution on, it waits until your app passes the user's choice: after consent to `attribution` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. The completion of `resolveInitialLink` comes only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). Registration for SKAdNetwork also waits for the choice.
 
@@ -465,12 +470,13 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 | Declared | Details |
 | --- | --- |
 | `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: the user ID set with `setUserId`. |
-| `DeviceID` | Random UUID generated on first launch, sent with deferred matching and analytics events. Stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. |
 | `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). Sessions: once analytics is mounted, the start and end of each use of the app with its duration, under a random session ID kept in memory only; more than 30 minutes in the background starts a new session. Events and deferred matching also carry the app version and build number, OS version, network type (Wi-Fi, cellular, other), install source (App Store or sandbox) and the App Tracking Transparency status, which Detour only reads and never requests; events also carry the preferred language. |
 | `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
 | `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
 
-Every collected type is declared as not linked to the user and not used for tracking. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
+Detour also sends a random install ID, generated on first launch, with deferred matching and analytics events. It is stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. It identifies this installation of your app, not the device, so the manifest does not declare it as Device ID.
+
+Every collected type is declared as not linked to the user and not used for tracking; if you call `setUserId`, see "What to answer in App Store Connect" below. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
 
 </details>
 
@@ -498,25 +504,24 @@ In App Store Connect, go to your app → **App Privacy** → **Data Types** → 
 | Category | Tick | Applies when |
 | --- | --- | --- |
 | **User Content** → Other User Content | Yes | Only if you leave `shouldUseClipboard` enabled (the default). Skip it if you set `shouldUseClipboard: false`. |
-| **Identifiers** → Device ID | Yes | Always — Detour generates and stores a random device ID for analytics. |
 | **Usage Data** → Product Interaction | Yes | Always — event names from `logEvent` / `logRetention`, plus universal-link opens. |
 | **Other Data** → Other Data Types | Yes | Always — the deferred-matching signals. |
 
-**Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Device ID**, and so on, and answer the three questions in each:
+**Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Product Interaction**, and so on, and answer the three questions in each:
 
 | Data type | "Used for" (select all that apply) | "Linked to identity" | "Used for tracking" |
 | --- | --- | --- | --- |
 | Other User Content | App Functionality | No | No |
-| Device ID | App Functionality, Analytics | No | No |
 | Product Interaction | App Functionality, Analytics | No | No |
 | Other Data Types | App Functionality | No | No |
 
 These answers mirror [`Sources/Detour/Resources/PrivacyInfo.xcprivacy`](./Sources/Detour/Resources/PrivacyInfo.xcprivacy) exactly, so you can cross-check them against the Privacy Report Xcode generates from your archive.
 
-Two things to double-check for your own app on top of this:
+Also check these for your own app:
 
+- If you call `Detour.setUserId`, Detour sends your user ID with deferred matching, events, conversions and consent records. Tick **Identifiers** → User ID (App Functionality, Analytics), and answer "Linked to identity: Yes" for it and for every Detour data type above.
 - Detour cannot see what you pass in `DetourAnalytics.logEvent(_:data:)`. If you put personal data there, declare it yourself.
-- If you call `DetourAnalytics.logConversion`, Detour receives the name, revenue, currency, revenue type, product ID, quantity and transaction ID of each conversion. Declare **Purchases** → Purchase History for Analytics yourself; the manifest does not include it yet.
+- If you call `DetourAnalytics.logConversion`, Detour receives the name, revenue, currency, revenue type, product ID, quantity and transaction ID of each conversion. Declare **Purchases** → Purchase History for Analytics yourself (linked to identity if you call `setUserId`); the manifest does not include it.
 - Universal-link query parameters are forwarded to Detour as-is. If your links carry personal data in params, that's yours to declare too.
 
 </details>

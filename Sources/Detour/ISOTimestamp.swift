@@ -1,6 +1,6 @@
 import Foundation
 
-/// UTC with milliseconds: the format of every new timestamp field in the API contract.
+/// UTC with milliseconds: the format of every new timestamp field in the API.
 enum ISOTimestamp {
     private static let formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

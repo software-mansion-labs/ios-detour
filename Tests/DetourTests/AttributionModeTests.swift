@@ -56,13 +56,26 @@ final class AttributionModeTests: XCTestCase {
         XCTAssertEqual(provider.starts, 1)
     }
 
-    func testConversionsReachTheProviderOnlyWithAttributionConsent() {
-        AttributionMode.forwardConversion(purchase, decision: .wait)
-        AttributionMode.forwardConversion(purchase, decision: .drop)
+    func testAConversionLoggedBeforeTheChoiceReachesTheProviderAfterAGrant() {
+        AttributionMode.forwardConversion(purchase)
+        AttributionMode.start(config: DetourConfig(apiKey: "key", appID: "app"))
+        AttributionMode.reevaluate(isWaiting: false)
+        // The provider started, but the attribution gate still waits.
+        XCTAssertEqual(provider.starts, 1)
         XCTAssertEqual(provider.conversions, [])
 
-        AttributionMode.forwardConversion(purchase, decision: .send)
+        AttributionMode.flushConversions(decision: .send)
         XCTAssertEqual(provider.conversions, ["purchase"])
+    }
+
+    func testConversionsKeptBeforeARefusalAreDropped() {
+        AttributionMode.forwardConversion(purchase)
+        AttributionMode.start(config: DetourConfig(apiKey: "key", appID: "app"))
+        AttributionMode.reevaluate(isWaiting: false)
+
+        AttributionMode.flushConversions(decision: .drop)
+        AttributionMode.flushConversions(decision: .send)
+        XCTAssertEqual(provider.conversions, [])
     }
 
     func testTheTokenComesFromTheProviderForAnMmpRequest() async {
