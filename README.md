@@ -465,12 +465,13 @@ Detour bundles a `PrivacyInfo.xcprivacy` manifest, copied into your app by both 
 | Declared | Details |
 | --- | --- |
 | `UserDefaults` API, reason `CA92.1` | Own app-scoped keys only: the user ID set with `setUserId`. |
-| `DeviceID` | Random UUID generated on first launch, sent with deferred matching and analytics events. Stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. |
 | `ProductInteraction` | Event names from `logEvent` / `logRetention`, plus universal-link opens (link URL, its query parameters, app version, OS version, device model). Sessions: once analytics is mounted, the start and end of each use of the app with its duration, under a random session ID kept in memory only; more than 30 minutes in the background starts a new session. Events and deferred matching also carry the app version and build number, OS version, network type (Wi-Fi, cellular, other), install source (App Store or sandbox) and the App Tracking Transparency status, which Detour only reads and never requests; events also carry the preferred language. |
 | `OtherUserContent` | A web URL extracted from the clipboard, read on first launch (and again after `resetSession(allowDeferredRetry: true)`). Only the URL is sent — any text copied along with it is discarded on device, and a clipboard holding no web URL sends nothing. Not read at all when `shouldUseClipboard: false`. |
 | `OtherDataTypes` | Deferred-matching signals, sent on first launch (and again after `resetSession(allowDeferredRetry: true)`): device model, OS version, screen size and scale, locales, timezone, user agent. |
 
-Every collected type is declared as not linked to the user and not used for tracking. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
+Detour also sends a random install ID, generated on first launch, with deferred matching and analytics events. It is stored in a file excluded from backups, so a reinstall or a restored phone gets a new one. It identifies this installation of your app, not the device, so the manifest does not declare it as Device ID.
+
+Every collected type is declared as not linked to the user and not used for tracking; if you call `setUserId`, see "What to answer in App Store Connect" below. Xcode includes the manifest in the Privacy Report it generates when you archive (Xcode → Organizer → right-click your archive → *Generate Privacy Report*).
 
 </details>
 
@@ -498,25 +499,24 @@ In App Store Connect, go to your app → **App Privacy** → **Data Types** → 
 | Category | Tick | Applies when |
 | --- | --- | --- |
 | **User Content** → Other User Content | Yes | Only if you leave `shouldUseClipboard` enabled (the default). Skip it if you set `shouldUseClipboard: false`. |
-| **Identifiers** → Device ID | Yes | Always — Detour generates and stores a random device ID for analytics. |
 | **Usage Data** → Product Interaction | Yes | Always — event names from `logEvent` / `logRetention`, plus universal-link opens. |
 | **Other Data** → Other Data Types | Yes | Always — the deferred-matching signals. |
 
-**Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Device ID**, and so on, and answer the three questions in each:
+**Step 2 — fill in the section for each box you ticked.** Once you save, App Store Connect adds a dedicated section per data type further down the page. Click **Set Up Other User Content**, **Set Up Product Interaction**, and so on, and answer the three questions in each:
 
 | Data type | "Used for" (select all that apply) | "Linked to identity" | "Used for tracking" |
 | --- | --- | --- | --- |
 | Other User Content | App Functionality | No | No |
-| Device ID | App Functionality, Analytics | No | No |
 | Product Interaction | App Functionality, Analytics | No | No |
 | Other Data Types | App Functionality | No | No |
 
 These answers mirror [`Sources/Detour/Resources/PrivacyInfo.xcprivacy`](./Sources/Detour/Resources/PrivacyInfo.xcprivacy) exactly, so you can cross-check them against the Privacy Report Xcode generates from your archive.
 
-Two things to double-check for your own app on top of this:
+Also check these for your own app:
 
+- If you call `Detour.setUserId`, Detour sends your user ID with deferred matching, events, conversions and consent records. Tick **Identifiers** → User ID (App Functionality, Analytics), and answer "Linked to identity: Yes" for it and for every Detour data type above.
 - Detour cannot see what you pass in `DetourAnalytics.logEvent(_:data:)`. If you put personal data there, declare it yourself.
-- If you call `DetourAnalytics.logConversion`, Detour receives the name, revenue, currency, revenue type, product ID, quantity and transaction ID of each conversion. Declare **Purchases** → Purchase History for Analytics yourself; the manifest does not include it yet.
+- If you call `DetourAnalytics.logConversion`, Detour receives the name, revenue, currency, revenue type, product ID, quantity and transaction ID of each conversion. Declare **Purchases** → Purchase History for Analytics yourself (linked to identity if you call `setUserId`); the manifest does not include it.
 - Universal-link query parameters are forwarded to Detour as-is. If your links carry personal data in params, that's yours to declare too.
 
 </details>
