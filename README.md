@@ -218,7 +218,7 @@ To turn the SDK off for a user, call `setEnabled(false)`. It stays off across la
 Detour.shared.setEnabled(false)
 ```
 
-To check your consent integration, call `getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose whether a request goes out now (`.send`), waits for consent (`.wait`) or is dropped (`.drop`). In debug builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
+To check your consent integration, call `getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose the consent gate's decision (`.send`, `.wait` or `.drop`). Before `start()` requests wait anyway. In debug builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
 
 ```swift
 let status = Detour.shared.getStatus()
@@ -295,10 +295,10 @@ Detour.shared.setConsent(DetourConsent(purposes: [
 Everything below happens only while the user's consent to `DetourPurpose.attribution` is passed on this launch. Without it, deferred links, analytics and conversions work as without the product, and nothing is attributed to a campaign.
 
 - Requests feed attribution of the install to the ad network click it came from.
-- `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The value only goes up.
+- `DetourAnalytics.logConversion` sets the SKAdNetwork conversion value, and from iOS 17.4 the AdAttributionKit one too. The rules that map a conversion to a value come from the Detour server, so changing them needs no app update. The SDK sends only increases: the highest matching value wins.
 - The first deferred link request carries the Apple Search Ads attribution token, so an install from a Search Ads campaign is not counted as organic.
 
-Sending data to ad networks needs one more purpose. The Detour backend sends an install or a conversion to a network set up for your app only with consent to `DetourPurpose.adNetworkSharing`; Google also needs `DetourPurpose.adPersonalization`. Without it the install is still attributed in Detour, but nothing goes to the network. Your consent prompt has to say this: that data is shared with ad networks (for example Google and Unity) and used to personalize ads. SKAdNetwork and AdAttributionKit postbacks are sent by Apple and follow `DetourPurpose.attribution` only.
+Sending data to ad networks needs one more purpose. The Detour backend sends an install or a conversion to a network set up for your app only with consent to `DetourPurpose.adNetworkSharing`; Google also needs `DetourPurpose.adPersonalization`. Without it the install is still attributed in Detour, but nothing goes to the network. Your consent prompt has to say this: that data is shared with ad networks (such as Google) and used to personalize ads. SKAdNetwork and AdAttributionKit postbacks are sent by Apple and follow `DetourPurpose.attribution` only.
 
 The install is attributed from the first deferred link request, and that request goes once per install. With attribution on, it waits until your app passes the user's choice: after consent to `attribution` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. The completion of `resolveInitialLink` comes only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). Registration for SKAdNetwork also waits for the choice.
 

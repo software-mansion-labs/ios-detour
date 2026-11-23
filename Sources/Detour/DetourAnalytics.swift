@@ -105,11 +105,14 @@ public final class DetourAnalytics {
         case .send:
             send(request)
         case .wait:
-            if isMounted, SdkConfigStore.shared.isKnown {
-                ConsentWarnings.warnOnce(
-                    "analyticsWaitsForConsent",
-                    "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch."
-                )
+            if isMounted {
+                let isStoredGrantWarned = ConsentGate.warnIfStoredGrantWaits(DetourPurpose.analytics)
+                if !isStoredGrantWarned, SdkConfigStore.shared.isKnown {
+                    ConsentWarnings.warnOnce(
+                        "analyticsWaitsForConsent",
+                        "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch."
+                    )
+                }
             }
             if waitingForConsent.count < Self.maxWaitingForConsent {
                 waitingForConsent.append(request)

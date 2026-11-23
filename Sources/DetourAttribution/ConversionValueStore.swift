@@ -69,7 +69,7 @@ final class ConversionValueStore {
         state(installID).highestFine
     }
 
-    /// Keeps the higher of the stored value and `fine`: SKAdNetwork takes only increases.
+    /// Keeps the higher of the stored value and `fine`. Only an increase is sent: the highest matching value wins.
     func raiseHighestFine(to fine: Int, installID: String) {
         update(installID) { $0.highestFine = max($0.highestFine, fine) }
     }

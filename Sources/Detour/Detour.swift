@@ -381,10 +381,13 @@ public class Detour {
         }
         whenStarted { [weak self] in
             if AttributionMode.isWaitingForConsent {
-                ConsentWarnings.warnOnce(
-                    "firstMatchWaits",
-                    "The first deferred link match waits for consent to attribution. Pass it with setConsent."
-                )
+                let isStoredGrantWarned = ConsentGate.warnIfStoredGrantWaits(DetourPurpose.attribution)
+                if !isStoredGrantWarned {
+                    ConsentWarnings.warnOnce(
+                        "firstMatchWaits",
+                        "The first deferred link match waits for consent to attribution. Pass it with setConsent."
+                    )
+                }
             }
             AttributionMode.whenDecided { [weak self] in
                 self?.matchDeferredLink(config: config, finish: finish)
