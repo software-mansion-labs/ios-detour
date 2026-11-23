@@ -18,8 +18,9 @@ public final class DetourAnalytics {
 
     private init() {}
 
+    /// The same as `Detour.shared.mountAnalytics(config:)`.
     public static func mount(config: DetourConfig) {
-        shared.mount(config: config)
+        Detour.shared.mountAnalytics(config: config)
     }
 
     public static func unmount() {
@@ -48,7 +49,14 @@ public final class DetourAnalytics {
         subscribe()
     }
 
+    /// The same as `Detour.shared.mountAnalytics(config:)`, which also runs `configure`: without it
+    /// the server config never loads and every request would wait for it.
     public func mount(config: DetourConfig) {
+        Detour.shared.mountAnalytics(config: config)
+    }
+
+    /// Called by `Detour.start()`.
+    func mountForStart(config: DetourConfig) {
         guard !isMounted else { return }
         isMounted = true
         self.config = config
