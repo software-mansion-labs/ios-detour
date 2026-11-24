@@ -183,14 +183,14 @@ let config = DetourConfig(
 
 `resolveInitialLink` configures and starts the SDK in one call. To wait for consent, `setConsent` is usually enough: analytics follows the consent gate described below, and with attribution on the first deferred link match waits for the choice on `attribution`. Split the call only if the law that applies to you requires consent before anything else leaves the device, deferred link matching included: `configure` sets the SDK up, and `start` begins analytics, sessions and deferred link matching. Events and conversions you log before `start` are kept in memory (up to 100) and sent after it, if consent to `analytics` allows. Links the user taps before `start` are routed and counted: the SDK sends the link click (link URL, app version, OS version, device model), because your plan's click limit applies to it.
 
-When the deferred link waits for `start` or for consent, the `resolveInitialLink` completion comes only after it. If your app holds its UI until the initial link is handled, wait for `onLinkProcessed` instead: it is called once, before the completion or before the SDK starts waiting, so you can show your consent prompt. A deferred link found after that still arrives in the completion.
+When the deferred link waits for `start` or for consent, the `resolveInitialLink` completion comes only after it. If your app holds its UI until the initial link is handled, wait for `onReadyForUI` instead: it is called once, before the completion or before the SDK starts waiting, so you can show your consent prompt. A deferred link found after that still arrives in the completion.
 
 ```swift
 Detour.shared.configure(config, autoStart: false)
 Detour.shared.resolveInitialLink(
     config: config,
     launchOptions: launchOptions,
-    onLinkProcessed: { showFirstScreen() }
+    onReadyForUI: { showFirstScreen() }
 ) { result in
     // handle result.link
 }
@@ -235,7 +235,7 @@ Detour.shared.configure(config, attribution: DetourAttribution())
 Detour.shared.resolveInitialLink(
     config: config,
     launchOptions: launchOptions,
-    onLinkProcessed: { showFirstScreen() }
+    onReadyForUI: { showFirstScreen() }
 ) { result in
     // handle result.link
 }
@@ -278,7 +278,7 @@ Detour.shared.configure(config, attribution: DetourAttribution())
 Detour.shared.resolveInitialLink(
     config: config,
     launchOptions: launchOptions,
-    onLinkProcessed: { showFirstScreen() }
+    onReadyForUI: { showFirstScreen() }
 ) { result in
     // handle result.link
 }
@@ -300,7 +300,7 @@ Everything below happens only while the user's consent to `DetourPurpose.attribu
 
 Sending data to ad networks needs one more purpose. The Detour backend sends an install or a conversion to a network set up for your app only with consent to `DetourPurpose.adNetworkSharing`; Google also needs `DetourPurpose.adPersonalization`. Without it the install is still attributed in Detour, but nothing goes to the network. Your consent prompt has to say this: that data is shared with ad networks (such as Google) and used to personalize ads. SKAdNetwork and AdAttributionKit postbacks are sent by Apple and follow `DetourPurpose.attribution` only.
 
-The install is attributed from the first deferred link request, and that request goes once per install. With attribution on, it waits until your app passes the user's choice: after consent to `attribution` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. The completion of `resolveInitialLink` comes only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). Registration for SKAdNetwork also waits for the choice.
+The install is attributed from the first deferred link request, and that request goes once per install. With attribution on, it waits until your app passes the user's choice: after consent to `attribution` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. The completion of `resolveInitialLink` comes only after the choice, so use `onReadyForUI` to show your consent prompt (see Starting only after consent). Registration for SKAdNetwork also waits for the choice.
 
 Your app needs no ad network identifiers for its installs to be attributed: `SKAdNetworkItems` belongs in apps that display ads, not in the app being advertised. Apple sends each winning postback to the ad network. To let Detour receive a copy of it, add both keys to your app's `Info.plist`:
 

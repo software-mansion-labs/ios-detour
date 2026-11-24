@@ -358,10 +358,10 @@ public class Detour {
         connectionOptions.userActivities.filter { $0.activityType == NSUserActivityTypeBrowsingWeb }
     }
 
-    // `finish` also reports the link processed; `report` alone is for the wait before the match.
+    // `finish` also reports ready for the UI; `report` alone is for the wait before the match.
     private func resolveDeferredInitialLink(
         config: DetourConfig,
-        report: LinkProcessedReport,
+        report: ReadyForUIReport,
         finish: @escaping @MainActor @Sendable (DetourResult) -> Void
     ) {
         if !InstallStore.shared.isFirstLaunch {
@@ -377,7 +377,7 @@ public class Detour {
         isSessionHandled = true
         DetourLogger.debug(tag, "First launch detected, processing deferred link")
         if !isStarted || AttributionMode.isWaitingForConsent {
-            report.processed()
+            report.ready()
         }
         whenStarted { [weak self] in
             if AttributionMode.isWaitingForConsent {
@@ -408,14 +408,16 @@ public class Detour {
         DetourLogger.debug(tag, "Using signal-based matching")
 
         Task { [weak self] in
+            // One decision for the header and the token: an `asa_token` never goes out as `core`.
+            // The token is read while the signals are collected.
+            let sdkPackage = AttributionMode.sdkPackage
+            async let asaToken = AttributionMode.attributionToken(for: sdkPackage)
             var matchRequest = await DeviceUtils.collectSignals(
                 shouldUseClipboard: config.shouldUseClipboard,
                 deviceID: InstallStore.shared.deviceID,
                 userID: UserIdStore.current
             )
-            // One decision for the header and the token: an `asa_token` never goes out as `core`.
-            let sdkPackage = AttributionMode.sdkPackage
-            matchRequest.asaToken = await AttributionMode.attributionToken(for: sdkPackage)
+            matchRequest.asaToken = await asaToken
             DetourNetwork.matchLink(
                 config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
             ) { [weak self] result in
@@ -482,37 +484,37 @@ public class Detour {
     }
     
     /// Routes the link the app was opened with, or matches the deferred link on the first launch,
-    /// and passes it to `completion`. `onLinkProcessed` is called once, before the
+    /// and passes it to `completion`. `onReadyForUI` is called once, before the
     /// completion or before the SDK starts waiting for `start()` or for consent to attribution,
     /// so an app that holds its UI until then can show its consent prompt; a deferred link found
     /// after that still arrives in `completion`.
     public func resolveInitialLink(
         config: DetourConfig,
         launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
-        onLinkProcessed: (@MainActor () -> Void)? = nil,
+        onReadyForUI: (@MainActor () -> Void)? = nil,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         resolveInitialLink(
             config: config,
             openURL: launchOptions?[.url] as? URL,
             activities: browsingWebActivities(from: launchOptions),
-            report: LinkProcessedReport(onLinkProcessed),
+            report: ReadyForUIReport(onReadyForUI),
             completion: completion
         )
     }
 
-    /// The scene version of `resolveInitialLink(config:launchOptions:onLinkProcessed:completion:)`.
+    /// The scene version of `resolveInitialLink(config:launchOptions:onReadyForUI:completion:)`.
     public func resolveInitialLink(
         config: DetourConfig,
         connectionOptions: UIScene.ConnectionOptions,
-        onLinkProcessed: (@MainActor () -> Void)? = nil,
+        onReadyForUI: (@MainActor () -> Void)? = nil,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         resolveInitialLink(
             config: config,
             openURL: connectionOptions.urlContexts.first?.url,
             activities: browsingWebActivities(from: connectionOptions),
-            report: LinkProcessedReport(onLinkProcessed),
+            report: ReadyForUIReport(onReadyForUI),
             completion: completion
         )
     }
@@ -521,13 +523,13 @@ public class Detour {
         config: DetourConfig,
         openURL: URL?,
         activities: [NSUserActivity],
-        report: LinkProcessedReport,
+        report: ReadyForUIReport,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
         mountAnalytics(config: config)
 
         let finish: @MainActor @Sendable (DetourResult) -> Void = { result in
-            report.processed()
+            report.ready()
             completion(result)
         }
 
@@ -574,18 +576,18 @@ public class Detour {
 }
 
 
-/// Calls `onLinkProcessed` once, whichever path gets there first.
+/// Calls `onReadyForUI` once, whichever path gets there first.
 @MainActor
-final class LinkProcessedReport {
-    private var onProcessed: (@MainActor () -> Void)?
+final class ReadyForUIReport {
+    private var onReady: (@MainActor () -> Void)?
 
-    init(_ onProcessed: (@MainActor () -> Void)?) {
-        self.onProcessed = onProcessed
+    init(_ onReady: (@MainActor () -> Void)?) {
+        self.onReady = onReady
     }
 
-    func processed() {
-        let pending = onProcessed
-        onProcessed = nil
+    func ready() {
+        let pending = onReady
+        onReady = nil
         pending?()
     }
 }
