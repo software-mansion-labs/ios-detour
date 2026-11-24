@@ -62,13 +62,13 @@ final class ConsentSwitchesTests: XCTestCase {
         XCTAssertEqual(warnings, [])
     }
 
-    func testTheProcessedLinkIsReportedOnce() {
+    func testReadyForUIIsReportedOnce() {
         var reports = 0
-        let report = LinkProcessedReport { reports += 1 }
-        report.processed()
-        report.processed()
+        let report = ReadyForUIReport { reports += 1 }
+        report.ready()
+        report.ready()
         XCTAssertEqual(reports, 1)
-        LinkProcessedReport(nil).processed()
+        ReadyForUIReport(nil).ready()
     }
 
     func testStatusDecisionsUseTheContractNames() {
