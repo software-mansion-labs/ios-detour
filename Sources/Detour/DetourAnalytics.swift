@@ -4,6 +4,8 @@ import Foundation
 public final class DetourAnalytics {
     public static let shared = DetourAnalytics()
 
+    private static let tag = "DetourAnalytics"
+
     private var isMounted = false
     private var subscriptionToken: UUID?
     private var hasLoggedColdStartRetention = false
@@ -22,6 +24,10 @@ public final class DetourAnalytics {
         shared.logEvent(eventName, data: data)
     }
 
+    /// Logs an analytics event under a custom name. Custom names must match
+    /// `^[a-z0-9_]{1,64}$`. Names starting with `af_` or `dt_`, and
+    /// `opened_via_universal_link`, are reserved. An invalid name is dropped
+    /// and logged as an error.
     public static func logEvent(_ eventName: String, data: [String: Any]? = nil) {
         shared.logEvent(eventName, data: data)
     }
@@ -78,9 +84,38 @@ public final class DetourAnalytics {
         logEvent(eventName.rawValue, data: data)
     }
 
+    /// Logs an analytics event under a custom name. Custom names must match
+    /// `^[a-z0-9_]{1,64}$`. Names starting with `af_` or `dt_`, and
+    /// `opened_via_universal_link`, are reserved. An invalid name is dropped
+    /// and logged as an error.
     public func logEvent(_ eventName: String, data: [String: Any]? = nil) {
+        if let problem = EventNameRules.problem(eventName) {
+            DetourLogger.error(Self.tag, "[Detour:ANALYTICS] Event \"\(eventName)\" dropped: \(problem).")
+            return
+        }
+
+        #if DEBUG
+        if let data {
+            warnIfDataTooLarge(eventName: eventName, data: data)
+        }
+        #endif
+
         AnalyticsEmitter.shared.emit(
             AnalyticsEventPayload(eventName: eventName, data: data, isRetention: false)
+        )
+    }
+
+    // Debug-only: it serializes `data` a second time just to measure it.
+    private func warnIfDataTooLarge(eventName: String, data: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(data),
+              let json = try? JSONSerialization.data(withJSONObject: data),
+              json.count > EventNameRules.maxDataBytes
+        else { return }
+
+        DetourLogger.warn(
+            Self.tag,
+            "[Detour:ANALYTICS] Event \"\(eventName)\" has \(json.count) bytes of data as JSON. "
+                + "Detour stores at most \(EventNameRules.maxDataBytes) bytes of data per event and may refuse larger events."
         )
     }
 

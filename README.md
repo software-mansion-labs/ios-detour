@@ -258,18 +258,28 @@ let config = DetourConfig(
 
 ## Analytics
 
-Analytics are mounted automatically when you call `resolveInitialLink`. To log custom events use the predefined `DetourEventName` enum or a custom string:
+Analytics are mounted automatically when you call `resolveInitialLink`. You can log events either with a predefined `DetourEventName` value or under your own name:
 
 <details>
 <summary>Analytics example</summary>
 
 ```swift
 DetourAnalytics.logEvent(.addToCart, data: ["sku": "abc"])
-DetourAnalytics.logEvent("custom_event", data: ["source": "home"])
+DetourAnalytics.logEvent("level_complete", data: ["level": 3])
 DetourAnalytics.logRetention("week_1")
 ```
 
 </details>
+
+Custom event names follow the same rules as on the server (checked by the SDK from 1.3.0):
+
+- Lowercase letters, digits and `_`, 1 to 64 characters (`^[a-z0-9_]{1,64}$`).
+- Names starting with `af_` or `dt_`, and `opened_via_universal_link`, are reserved.
+- An app can have up to 500 custom names. `DetourEventName` values don't count, and a name that's already registered keeps working once the limit is reached.
+- Keep names static. Put changing values such as IDs in `data`: `logEvent("level_complete", data: ["level": 3])`, not `logEvent("level_\(id)_complete")`, which registers a new name for every level and soon reaches the limit.
+- `data` can be up to 2,048 bytes as JSON.
+
+`logEvent` drops a name that breaks these rules and logs an error. When the server refuses an event, for example over the 500-name limit, the SDK logs the server's reason.
 
 If you need analytics without calling `resolveInitialLink`, mount and unmount manually:
 
