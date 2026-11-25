@@ -9,6 +9,13 @@ public protocol DetourAttributionProvider: AnyObject, Sendable {
     @MainActor func didLogConversion(_ conversion: DetourConversion)
     /// The Apple Search Ads token for deferred link matching, or `nil` when there is none.
     func attributionToken() async -> String?
+    /// The IDFA, or `nil` when the user did not allow tracking. The SDK sends it only with consent
+    /// to `DetourPurpose.adNetworkSharing`.
+    func advertisingID() -> String?
+}
+
+extension DetourAttributionProvider {
+    public func advertisingID() -> String? { nil }
 }
 
 /// A response to a GET that sends the last `ETag` as `If-None-Match`.
@@ -151,6 +158,21 @@ enum AttributionMode {
                 first.resume(nil)
             }
         }
+    }
+
+    /// The identifiers for a request of this package: none for `core` or without a provider.
+    static func deviceIdentifiers(for sdkPackage: SdkPackage) -> DeviceIdentifiers {
+        deviceIdentifiers(for: sdkPackage, adNetworkSharing: ConsentGate.decision(for: DetourPurpose.adNetworkSharing))
+    }
+
+    // The advertising ID is only for postbacks to ad networks, so it needs that purpose, not attribution.
+    static func deviceIdentifiers(for sdkPackage: SdkPackage, adNetworkSharing: GateDecision) -> DeviceIdentifiers {
+        guard sdkPackage == .mmp, let provider else { return .none }
+        var identifiers = DeviceIdentifiers.none
+        if adNetworkSharing == .send {
+            identifiers.advertisingID = provider.advertisingID().map(AdvertisingID.idfa)
+        }
+        return identifiers
     }
 
     // A conversion logged before `start()` or while the gate waits is kept until the provider starts,

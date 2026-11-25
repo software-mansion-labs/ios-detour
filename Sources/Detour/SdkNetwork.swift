@@ -103,6 +103,25 @@ enum SdkNetwork {
         }
     }
 
+    /// True once the server answered for good: stored, unchanged or rejected. False to try again later.
+    static func sendDeviceIdentifiers(_ fields: [String: Any], config: DetourConfig, sdkPackage: SdkPackage) async -> Bool {
+        var body = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(RequestContext.current()))) as? [String: Any] ?? [:]
+        body.merge(fields) { _, field in field }
+        guard let status = await post(.deviceIdentifiers, body: body, config: config, sdkPackage: sdkPackage) else { return false }
+
+        switch status {
+        case 200 ... 299:
+            return true
+        case 429, 500...:
+            return false
+        default:
+            // The server will not take this state, so it waits until the state changes. A 404 too:
+            // this is sent only after the first match, so an install the server lacks will not come.
+            DetourLogger.warn(tag, "[Detour:ATTRIBUTION] sdk/device-identifiers rejected: \(status)")
+            return true
+        }
+    }
+
     /// The response status, or nil when no response arrived.
     static func post(
         _ endpoint: DetourEndpoint,

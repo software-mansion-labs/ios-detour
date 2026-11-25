@@ -80,6 +80,7 @@ struct SignalMatchRequest: Codable {
     let userID: String?
     /// The Apple Search Ads token, sent only in attribution mode.
     var asaToken: String? = nil
+    var advertisingID: AdvertisingID? = nil
 
     enum CodingKeys: String, CodingKey {
         case platform, model, manufacturer, systemVersion, screenWidth, screenHeight, scale
@@ -87,6 +88,7 @@ struct SignalMatchRequest: Codable {
         case deviceID = "device_id"
         case userID = "user_id"
         case asaToken = "asa_token"
+        case advertisingID = "advertising_id"
     }
 }
 

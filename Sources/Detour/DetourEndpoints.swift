@@ -12,6 +12,7 @@ enum DetourEndpoint: String, CaseIterable {
     case sdkConsent = "api/sdk/consent"
     case sdkDisable = "api/sdk/disable"
     case conversionValueSchema = "api/sdk/conversion-value-schema"
+    case deviceIdentifiers = "api/sdk/device-identifiers"
 }
 
 enum DetourEndpoints {

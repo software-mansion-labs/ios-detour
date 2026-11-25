@@ -236,3 +236,15 @@ final class DetourAttributionRegistrationTests: XCTestCase {
         XCTAssertEqual(updater.registrations, 0)
     }
 }
+
+final class AdvertisingIDTests: XCTestCase {
+    func testAZeroIDFAIsNoIDFA() throws {
+        let zero = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000000"))
+        XCTAssertNil(DetourAttribution.advertisingID(from: zero))
+    }
+
+    func testTheIDFAIsSentLowercase() throws {
+        let id = try XCTUnwrap(UUID(uuidString: "6D92078A-8246-4BA4-AE5B-76104861E7DC"))
+        XCTAssertEqual(DetourAttribution.advertisingID(from: id), "6d92078a-8246-4ba4-ae5b-76104861e7dc")
+    }
+}

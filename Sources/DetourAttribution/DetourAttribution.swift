@@ -1,4 +1,6 @@
 import AdServices
+import AdSupport
+import AppTrackingTransparency
 import Detour
 import Foundation
 
@@ -91,6 +93,18 @@ public final class DetourAttribution: DetourAttributionProvider {
             DetourAttributionHost.logWarning("[Detour:ATTRIBUTION] Apple Search Ads token unavailable: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    // The app shows the ATT prompt; this only reads the result. Without tracking allowed iOS returns zeros.
+    public nonisolated func advertisingID() -> String? {
+        guard ATTrackingManager.trackingAuthorizationStatus == .authorized else { return nil }
+        return Self.advertisingID(from: ASIdentifierManager.shared().advertisingIdentifier)
+    }
+
+    private nonisolated static let zeroAdvertisingID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")
+
+    nonisolated static func advertisingID(from identifier: UUID) -> String? {
+        identifier == zeroAdvertisingID ? nil : identifier.uuidString.lowercased()
     }
 
     private func warnAboutMissingPostbackCopyKeys() {
