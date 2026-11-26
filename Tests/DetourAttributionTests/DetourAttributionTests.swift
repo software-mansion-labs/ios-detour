@@ -247,6 +247,7 @@ final class AdvertisingIDTests: XCTestCase {
     func testAnAppForChildrenReadsNoIDFA() {
         let attribution = DetourAttribution(store: ConversionValueStore(), updater: ApplePostbackUpdater(), isChildDirected: true)
         XCTAssertNil(attribution.advertisingID())
+        XCTAssertNil(attribution.vendorID())
     }
 
     func testTheIDFAIsSentLowercase() throws {
