@@ -101,6 +101,14 @@ final class DeviceIdentifiersTests: XCTestCase {
         XCTAssertTrue(bodies.first?["advertising_id"] is NSNull)
     }
 
+    func testIdentifiersGoOnlyAfterTheFirstMatchAndAsMmp() {
+        XCTAssertTrue(DeviceIdentifiersReporter.canSend(isStarted: true, isMatchInFlight: false, isFirstLaunch: false, sdkPackage: .mmp))
+        XCTAssertFalse(DeviceIdentifiersReporter.canSend(isStarted: false, isMatchInFlight: false, isFirstLaunch: false, sdkPackage: .mmp))
+        XCTAssertFalse(DeviceIdentifiersReporter.canSend(isStarted: true, isMatchInFlight: true, isFirstLaunch: false, sdkPackage: .mmp))
+        XCTAssertFalse(DeviceIdentifiersReporter.canSend(isStarted: true, isMatchInFlight: false, isFirstLaunch: true, sdkPackage: .mmp))
+        XCTAssertFalse(DeviceIdentifiersReporter.canSend(isStarted: true, isMatchInFlight: false, isFirstLaunch: false, sdkPackage: .core))
+    }
+
     func testTheMatchRequestCarriesTheAdvertisingID() throws {
         var request = SignalMatchRequest(
             platform: "ios", model: "iPhone15,2", manufacturer: "Apple", systemVersion: "18.6",

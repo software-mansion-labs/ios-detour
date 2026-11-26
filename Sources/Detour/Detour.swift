@@ -79,10 +79,13 @@ public class Detour {
     private func setUpDeviceIdentifiersReporter(_ config: DetourConfig) {
         deviceIdentifiersReporter = DeviceIdentifiersReporter(
             canSend: { [weak self] in
-                // After the first match, so the server has the install to attach them to; only as
-                // `mmp`, because the server keeps nothing from `core`.
-                guard let self, self.isStarted, !self.isDeferredMatchInFlight, !InstallStore.shared.isFirstLaunch else { return false }
-                return AttributionMode.sdkPackage == .mmp
+                guard let self else { return false }
+                return DeviceIdentifiersReporter.canSend(
+                    isStarted: self.isStarted,
+                    isMatchInFlight: self.isDeferredMatchInFlight,
+                    isFirstLaunch: InstallStore.shared.isFirstLaunch,
+                    sdkPackage: AttributionMode.sdkPackage
+                )
             },
             current: { AttributionMode.deviceIdentifiers(for: AttributionMode.sdkPackage) },
             deviceID: { InstallStore.shared.deviceID },

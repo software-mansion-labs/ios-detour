@@ -65,6 +65,12 @@ final class DeviceIdentifiersReporter {
         self.send = send
     }
 
+    // After the first match, so the server has the install to attach them to; only as `mmp`,
+    // because the server keeps nothing from `core`.
+    static func canSend(isStarted: Bool, isMatchInFlight: Bool, isFirstLaunch: Bool, sdkPackage: SdkPackage) -> Bool {
+        isStarted && !isMatchInFlight && !isFirstLaunch && sdkPackage == .mmp
+    }
+
     func sync() {
         guard !isSending else {
             needsAnotherSync = true
