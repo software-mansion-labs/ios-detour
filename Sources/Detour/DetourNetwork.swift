@@ -55,6 +55,7 @@ class DetourNetwork {
         sdkPackage: SdkPackage,
         request matchRequest: SignalMatchRequest,
         linkType: LinkType = .deferred,
+        onAnswered: (@MainActor @Sendable (_ statusCode: Int) -> Void)? = nil,
         completion: @escaping @Sendable (DetourResult) -> Void
     ) {
 
@@ -81,6 +82,10 @@ class DetourNetwork {
         DetourLogger.debug(tag, "Sending match request to API")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
+            // Before the completion, which is also queued on the main queue.
+            if let onAnswered, let statusCode = (response as? HTTPURLResponse)?.statusCode {
+                DispatchQueue.main.async { MainActor.assumeIsolated { onAnswered(statusCode) } }
+            }
             handleResponse(
                 data: data,
                 response: response,

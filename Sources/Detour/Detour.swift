@@ -12,6 +12,9 @@ public class Detour {
     private var runOnStart: [() -> Void] = []
     private var consentToSend: (consent: DetourConsent, text: String?)?
     private var killSwitchReporter: KillSwitchReporter?
+    private var deviceIdentifiersReporter: DeviceIdentifiersReporter?
+    private var isDeferredMatchInFlight = false
+    private var becomeActiveObserver: NSObjectProtocol?
     private var userIdValidator: (@Sendable (String) -> Bool)?
     private let tag = "Detour"
 
@@ -45,6 +48,7 @@ public class Detour {
                 )
             }
             killSwitchReporter?.sync()
+            setUpDeviceIdentifiersReporter(config)
             if let consentToSend {
                 self.consentToSend = nil
                 sendConsent(consentToSend.consent, text: consentToSend.text, config: config)
@@ -69,6 +73,29 @@ public class Detour {
         let waiting = runOnStart
         runOnStart = []
         waiting.forEach { $0() }
+        deviceIdentifiersReporter?.sync()
+    }
+
+    private func setUpDeviceIdentifiersReporter(_ config: DetourConfig) {
+        deviceIdentifiersReporter = DeviceIdentifiersReporter(
+            canSend: { [weak self] in
+                // After the first match, so the server has the install to attach them to; only as
+                // `mmp`, because the server keeps nothing from `core`.
+                guard let self, self.isStarted, !self.isDeferredMatchInFlight, !InstallStore.shared.isFirstLaunch else { return false }
+                return AttributionMode.sdkPackage == .mmp
+            },
+            current: { AttributionMode.deviceIdentifiers(for: AttributionMode.sdkPackage) },
+            deviceID: { InstallStore.shared.deviceID },
+            send: { fields in
+                await SdkNetwork.sendDeviceIdentifiers(fields, config: config, sdkPackage: .mmp)
+            }
+        )
+        // Also after the ATT prompt closes: the app becomes active again with the new status.
+        becomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.deviceIdentifiersReporter?.sync() }
+        }
     }
 
     // Once per launch, so a value changed on the server reaches the app on its next launch.
@@ -112,6 +139,7 @@ public class Detour {
     private func consentInputsChanged() {
         DetourAnalytics.shared.reevaluateWaiting()
         AttributionMode.reevaluate()
+        deviceIdentifiersReporter?.sync()
     }
 
     // PROVISIONAL: how long after setConsent the SDK expects start() before it warns.
@@ -406,11 +434,13 @@ public class Detour {
             return
         }
         DetourLogger.debug(tag, "Using signal-based matching")
+        isDeferredMatchInFlight = true
 
         Task { [weak self] in
             // One decision for the header and the token: an `asa_token` never goes out as `core`.
             // The token is read while the signals are collected.
             let sdkPackage = AttributionMode.sdkPackage
+            let identifiers = AttributionMode.deviceIdentifiers(for: sdkPackage)
             async let asaToken = AttributionMode.attributionToken(for: sdkPackage)
             var matchRequest = await DeviceUtils.collectSignals(
                 shouldUseClipboard: config.shouldUseClipboard,
@@ -418,14 +448,23 @@ public class Detour {
                 userID: UserIdStore.current
             )
             matchRequest.asaToken = await asaToken
+            matchRequest.advertisingID = identifiers.advertisingID
+            let deviceID = matchRequest.deviceID
             DetourNetwork.matchLink(
-                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
+                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred,
+                onAnswered: { [weak self] statusCode in
+                    // A 404 still saves the install, so the server has what the body carried.
+                    guard (200 ... 299).contains(statusCode) || statusCode == 404 else { return }
+                    self?.deviceIdentifiersReporter?.markSent(identifiers, deviceID: deviceID)
+                }
             ) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {
                         finish(result)
                         return
                     }
+                    self.isDeferredMatchInFlight = false
+                    self.deviceIdentifiersReporter?.sync()
 
                     let filteredResult = self.filterNonWebUrlLikeLinks(result, mode: config.linkProcessingMode)
                     if filteredResult.link == nil {

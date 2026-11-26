@@ -1,4 +1,6 @@
 import AdServices
+import AdSupport
+import AppTrackingTransparency
 import Detour
 import Foundation
 
@@ -24,19 +26,29 @@ public final class DetourAttribution: DetourAttributionProvider {
     private var registration: Task<Void, Never>?
     /// `nil` skips the `Info.plist` check.
     private let infoDictionary: [String: Any]?
+    private let isChildDirected: Bool
 
-    public convenience init() {
+    /// `isChildDirected: true` for an app for children (App Store Kids category, COPPA): the SDK
+    /// then reads no device identifier.
+    public convenience init(isChildDirected: Bool = false) {
         self.init(
             store: ConversionValueStore(),
             updater: ApplePostbackUpdater(),
-            infoDictionary: Bundle.main.infoDictionary ?? [:]
+            infoDictionary: Bundle.main.infoDictionary ?? [:],
+            isChildDirected: isChildDirected
         )
     }
 
-    init(store: ConversionValueStore, updater: PostbackUpdating, infoDictionary: [String: Any]? = nil) {
+    init(
+        store: ConversionValueStore,
+        updater: PostbackUpdating,
+        infoDictionary: [String: Any]? = nil,
+        isChildDirected: Bool = false
+    ) {
         self.store = store
         self.updater = updater
         self.infoDictionary = infoDictionary
+        self.isChildDirected = isChildDirected
     }
 
     /// The `Info.plist` keys that tell Apple where to send copies of winning postbacks: SKAdNetwork, then AdAttributionKit.
@@ -91,6 +103,18 @@ public final class DetourAttribution: DetourAttributionProvider {
             DetourAttributionHost.logWarning("[Detour:ATTRIBUTION] Apple Search Ads token unavailable: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    // The app shows the ATT prompt; this only reads the result. Without tracking allowed iOS returns zeros.
+    public nonisolated func advertisingID() -> String? {
+        guard !isChildDirected, ATTrackingManager.trackingAuthorizationStatus == .authorized else { return nil }
+        return Self.advertisingID(from: ASIdentifierManager.shared().advertisingIdentifier)
+    }
+
+    private nonisolated static let zeroAdvertisingID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")
+
+    nonisolated static func advertisingID(from identifier: UUID) -> String? {
+        identifier == zeroAdvertisingID ? nil : identifier.uuidString.lowercased()
     }
 
     private func warnAboutMissingPostbackCopyKeys() {
