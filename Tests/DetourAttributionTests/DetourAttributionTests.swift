@@ -243,6 +243,12 @@ final class AdvertisingIDTests: XCTestCase {
         XCTAssertNil(DetourAttribution.advertisingID(from: zero))
     }
 
+    @MainActor
+    func testAnAppForChildrenReadsNoIDFA() {
+        let attribution = DetourAttribution(store: ConversionValueStore(), updater: ApplePostbackUpdater(), isChildDirected: true)
+        XCTAssertNil(attribution.advertisingID())
+    }
+
     func testTheIDFAIsSentLowercase() throws {
         let id = try XCTUnwrap(UUID(uuidString: "6D92078A-8246-4BA4-AE5B-76104861E7DC"))
         XCTAssertEqual(DetourAttribution.advertisingID(from: id), "6d92078a-8246-4ba4-ae5b-76104861e7dc")
