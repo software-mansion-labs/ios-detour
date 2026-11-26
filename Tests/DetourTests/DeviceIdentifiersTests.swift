@@ -8,6 +8,7 @@ final class DeviceIdentifiersTests: XCTestCase {
         func didLogConversion(_ conversion: DetourConversion) {}
         func attributionToken() async -> String? { nil }
         func advertisingID() -> String? { "6d92078a-8246-4ba4-ae5b-76104861e7dc" }
+        func vendorID() -> String? { "0f3c2b1a-1111-4222-8333-944455556666" }
     }
 
     private let idfa = AdvertisingID.idfa("6d92078a-8246-4ba4-ae5b-76104861e7dc")
@@ -19,15 +20,33 @@ final class DeviceIdentifiersTests: XCTestCase {
     func testTheAdvertisingIDNeedsConsentToSharingWithAdNetworks() {
         AttributionMode.register(Provider())
 
-        XCTAssertEqual(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .send).advertisingID, idfa)
-        XCTAssertNil(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .wait).advertisingID)
-        XCTAssertNil(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .drop).advertisingID)
+        XCTAssertEqual(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .send, isIDFVOn: false).advertisingID, idfa)
+        XCTAssertNil(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .wait, isIDFVOn: false).advertisingID)
+        XCTAssertNil(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .drop, isIDFVOn: false).advertisingID)
     }
 
     func testCoreSendsNoIdentifiers() {
         AttributionMode.register(Provider())
 
-        XCTAssertEqual(AttributionMode.deviceIdentifiers(for: .core, adNetworkSharing: .send), .none)
+        XCTAssertEqual(AttributionMode.deviceIdentifiers(for: .core, adNetworkSharing: .send, isIDFVOn: true), .none)
+    }
+
+    func testTheIDFVNeedsTheServerFlagButNotSharingWithAdNetworks() {
+        AttributionMode.register(Provider())
+
+        XCTAssertEqual(
+            AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .drop, isIDFVOn: true).idfv,
+            "0f3c2b1a-1111-4222-8333-944455556666"
+        )
+        XCTAssertNil(AttributionMode.deviceIdentifiers(for: .mmp, adNetworkSharing: .send, isIDFVOn: false).idfv)
+    }
+
+    func testTheIDFVGoesAsAString() throws {
+        let fields = DeviceIdentifiersReporter.changes(
+            current: DeviceIdentifiers(idfv: "0f3c2b1a-1111-4222-8333-944455556666").encodedFields,
+            sentHashes: [:]
+        ).fields
+        XCTAssertEqual(fields["idfv"] as? String, "0f3c2b1a-1111-4222-8333-944455556666")
     }
 
     func testOnlyChangedFieldsGoOutAndAGoneValueIsCleared() throws {

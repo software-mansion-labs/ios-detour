@@ -3,6 +3,7 @@ import AdSupport
 import AppTrackingTransparency
 import Detour
 import Foundation
+import UIKit
 
 /// The part of `DetourAttributionHost` this product uses, so tests can pass their own.
 @MainActor
@@ -26,15 +27,18 @@ public final class DetourAttribution: DetourAttributionProvider {
     private var registration: Task<Void, Never>?
     /// `nil` skips the `Info.plist` check.
     private let infoDictionary: [String: Any]?
+    private let readsIDFV: Bool
     private let isChildDirected: Bool
 
+    /// `readsIDFV: false` keeps the IDFV on the device, also when the Detour server turns it on.
     /// `isChildDirected: true` for an app for children (App Store Kids category, COPPA): the SDK
     /// then reads no device identifier.
-    public convenience init(isChildDirected: Bool = false) {
+    public convenience init(readsIDFV: Bool = true, isChildDirected: Bool = false) {
         self.init(
             store: ConversionValueStore(),
             updater: ApplePostbackUpdater(),
             infoDictionary: Bundle.main.infoDictionary ?? [:],
+            readsIDFV: readsIDFV,
             isChildDirected: isChildDirected
         )
     }
@@ -43,11 +47,13 @@ public final class DetourAttribution: DetourAttributionProvider {
         store: ConversionValueStore,
         updater: PostbackUpdating,
         infoDictionary: [String: Any]? = nil,
+        readsIDFV: Bool = true,
         isChildDirected: Bool = false
     ) {
         self.store = store
         self.updater = updater
         self.infoDictionary = infoDictionary
+        self.readsIDFV = readsIDFV
         self.isChildDirected = isChildDirected
     }
 
@@ -109,6 +115,10 @@ public final class DetourAttribution: DetourAttributionProvider {
     public nonisolated func advertisingID() -> String? {
         guard !isChildDirected, ATTrackingManager.trackingAuthorizationStatus == .authorized else { return nil }
         return Self.advertisingID(from: ASIdentifierManager.shared().advertisingIdentifier)
+    }
+
+    public func vendorID() -> String? {
+        readsIDFV && !isChildDirected ? UIDevice.current.identifierForVendor?.uuidString.lowercased() : nil
     }
 
     private nonisolated static let zeroAdvertisingID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")

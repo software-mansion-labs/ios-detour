@@ -449,6 +449,7 @@ public class Detour {
             )
             matchRequest.asaToken = await asaToken
             matchRequest.advertisingID = identifiers.advertisingID
+            matchRequest.idfv = identifiers.idfv
             DetourNetwork.matchLink(
                 config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
             ) { [weak self] result in

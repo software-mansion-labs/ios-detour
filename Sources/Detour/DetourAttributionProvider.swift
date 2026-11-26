@@ -12,10 +12,14 @@ public protocol DetourAttributionProvider: AnyObject, Sendable {
     /// The IDFA, or `nil` when the user did not allow tracking. The SDK sends it only with consent
     /// to `DetourPurpose.adNetworkSharing`.
     func advertisingID() -> String?
+    /// The IDFV, or `nil` when the app turned it off. The SDK sends it only with consent to
+    /// `DetourPurpose.attribution` and when the Detour server turns it on for the app.
+    @MainActor func vendorID() -> String?
 }
 
 extension DetourAttributionProvider {
     public func advertisingID() -> String? { nil }
+    @MainActor public func vendorID() -> String? { nil }
 }
 
 /// A response to a GET that sends the last `ETag` as `If-None-Match`.
@@ -162,15 +166,27 @@ enum AttributionMode {
 
     /// The identifiers for a request of this package: none for `core` or without a provider.
     static func deviceIdentifiers(for sdkPackage: SdkPackage) -> DeviceIdentifiers {
-        deviceIdentifiers(for: sdkPackage, adNetworkSharing: ConsentGate.decision(for: DetourPurpose.adNetworkSharing))
+        deviceIdentifiers(
+            for: sdkPackage,
+            adNetworkSharing: ConsentGate.decision(for: DetourPurpose.adNetworkSharing),
+            isIDFVOn: SdkConfigStore.shared.current.isOn(readIDFVFlag)
+        )
     }
 
-    // The advertising ID is only for postbacks to ad networks, so it needs that purpose, not attribution.
-    static func deviceIdentifiers(for sdkPackage: SdkPackage, adNetworkSharing: GateDecision) -> DeviceIdentifiers {
+    // PROVISIONAL: the IDFV is read only with consent and a server flag until the legal answer on
+    // whether it may be read by default; the answer changes the flag, not the SDK.
+    static let readIDFVFlag = "read_idfv"
+
+    // An `mmp` request already has consent to attribution, which the IDFV needs. The advertising ID
+    // is only for postbacks to ad networks, so it needs that purpose too.
+    static func deviceIdentifiers(for sdkPackage: SdkPackage, adNetworkSharing: GateDecision, isIDFVOn: Bool) -> DeviceIdentifiers {
         guard sdkPackage == .mmp, let provider else { return .none }
         var identifiers = DeviceIdentifiers.none
         if adNetworkSharing == .send {
             identifiers.advertisingID = provider.advertisingID().map(AdvertisingID.idfa)
+        }
+        if isIDFVOn {
+            identifiers.idfv = provider.vendorID()
         }
         return identifiers
     }
