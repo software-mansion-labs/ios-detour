@@ -118,7 +118,7 @@ public final class DetourAttribution: DetourAttributionProvider {
     }
 
     public func vendorID() -> String? {
-        readsIDFV ? UIDevice.current.identifierForVendor?.uuidString.lowercased() : nil
+        readsIDFV && !isChildDirected ? UIDevice.current.identifierForVendor?.uuidString.lowercased() : nil
     }
 
     private nonisolated static let zeroAdvertisingID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")
