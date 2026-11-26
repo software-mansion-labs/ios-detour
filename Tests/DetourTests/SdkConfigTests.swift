@@ -32,6 +32,15 @@ final class SdkConfigTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    func testFeatureFlagsAreReadAndAMissingOneIsOff() throws {
+        let config = try XCTUnwrap(SdkConfig(json: Data(#"{"schema_version":1,"consent_gate_default":{},"feature_flags":{"read_idfv":true}}"#.utf8)))
+        XCTAssertTrue(config.isOn("read_idfv"))
+        XCTAssertFalse(config.isOn("read_app_set_id"))
+
+        let withoutFlags = try XCTUnwrap(SdkConfig(json: Data(#"{"schema_version":1,"consent_gate_default":{}}"#.utf8)))
+        XCTAssertFalse(withoutFlags.isOn("read_idfv"))
+    }
+
     func testEveryGateIsClosedUntilTheFirstFetchEnds() {
         let store = SdkConfigStore(defaults: defaults)
         XCTAssertFalse(store.isKnown)

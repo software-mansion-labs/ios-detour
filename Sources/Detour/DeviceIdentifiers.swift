@@ -14,6 +14,7 @@ struct AdvertisingID: Codable, Equatable {
 /// The identifiers the SDK may send now, after the consent gate and the provider's own checks.
 struct DeviceIdentifiers: Equatable {
     var advertisingID: AdvertisingID?
+    var idfv: String?
 
     static let none = DeviceIdentifiers()
 
@@ -23,6 +24,7 @@ struct DeviceIdentifiers: Equatable {
         encoder.outputFormatting = .sortedKeys
         var fields: [String: Data] = [:]
         fields["advertising_id"] = advertisingID.flatMap { try? encoder.encode($0) }
+        fields["idfv"] = idfv.flatMap { try? encoder.encode($0) }
         return fields
     }
 }

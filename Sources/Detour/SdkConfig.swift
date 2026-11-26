@@ -11,6 +11,7 @@ enum ConsentGateDefault: String {
 struct SdkConfig: Equatable {
     let schemaVersion: Int
     let consentGateDefaults: [String: ConsentGateDefault]
+    var featureFlags: [String: Bool] = [:]
 
     // The only gate values written in the SDK, used when the first fetch failed and nothing is
     // cached. Until that fetch ends every gate is closed; every other value comes from the server.
@@ -24,9 +25,15 @@ struct SdkConfig: Equatable {
         consentGateDefaults[purpose] ?? .closed
     }
 
+    /// A flag the config does not list is off.
+    func isOn(_ flag: String) -> Bool {
+        featureFlags[flag] == true
+    }
+
     private struct Response: Decodable {
         let schema_version: Int
         let consent_gate_default: [String: String]
+        let feature_flags: [String: Bool]?
     }
 
     /// nil for a body in another shape, so an unexpected response never replaces a good config.
@@ -34,6 +41,7 @@ struct SdkConfig: Equatable {
         guard let response = try? JSONDecoder().decode(Response.self, from: json) else { return nil }
         schemaVersion = response.schema_version
         consentGateDefaults = response.consent_gate_default.compactMapValues(ConsentGateDefault.init(rawValue:))
+        featureFlags = response.feature_flags ?? [:]
     }
 
     init(schemaVersion: Int, consentGateDefaults: [String: ConsentGateDefault]) {

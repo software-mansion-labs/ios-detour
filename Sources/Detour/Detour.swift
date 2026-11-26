@@ -452,6 +452,7 @@ public class Detour {
             )
             matchRequest.asaToken = await asaToken
             matchRequest.advertisingID = identifiers.advertisingID
+            matchRequest.idfv = identifiers.idfv
             let deviceID = matchRequest.deviceID
             DetourNetwork.matchLink(
                 config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred,
