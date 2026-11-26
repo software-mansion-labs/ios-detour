@@ -449,8 +449,14 @@ public class Detour {
             )
             matchRequest.asaToken = await asaToken
             matchRequest.advertisingID = identifiers.advertisingID
+            let deviceID = matchRequest.deviceID
             DetourNetwork.matchLink(
-                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred
+                config: config, sdkPackage: sdkPackage, request: matchRequest, linkType: .deferred,
+                onAnswered: { [weak self] statusCode in
+                    // A 404 still saves the install, so the server has what the body carried.
+                    guard (200 ... 299).contains(statusCode) || statusCode == 404 else { return }
+                    self?.deviceIdentifiersReporter?.markSent(identifiers, deviceID: deviceID)
+                }
             ) { [weak self] result in
                 Task { @MainActor in
                     guard let self else {

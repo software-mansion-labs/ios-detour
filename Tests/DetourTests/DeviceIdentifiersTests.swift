@@ -74,6 +74,33 @@ final class DeviceIdentifiersTests: XCTestCase {
         XCTAssertEqual(bodies.count, 3)
     }
 
+    func testWhatTheFirstMatchCarriedIsNotSentAgain() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "DeviceIdentifiersMatchTests"))
+        defaults.removePersistentDomain(forName: "DeviceIdentifiersMatchTests")
+        var current = DeviceIdentifiers(advertisingID: idfa)
+        var bodies: [[String: Any]] = []
+        let reporter = DeviceIdentifiersReporter(
+            defaults: defaults,
+            canSend: { true },
+            current: { current },
+            deviceID: { "device" },
+            send: { body in
+                bodies.append(body)
+                return true
+            }
+        )
+
+        reporter.markSent(current, deviceID: "device")
+        reporter.sync()
+        await Task.yield()
+        XCTAssertTrue(bodies.isEmpty)
+
+        current = .none
+        reporter.sync()
+        await Task.yield()
+        XCTAssertTrue(bodies.first?["advertising_id"] is NSNull)
+    }
+
     func testTheMatchRequestCarriesTheAdvertisingID() throws {
         var request = SignalMatchRequest(
             platform: "ios", model: "iPhone15,2", manufacturer: "Apple", systemVersion: "18.6",

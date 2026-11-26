@@ -92,6 +92,14 @@ final class DeviceIdentifiersReporter {
         }
     }
 
+    /// Called once the server answered the first match: the identifiers it carried are on the
+    /// server, so the next sync does not send them again.
+    func markSent(_ identifiers: DeviceIdentifiers, deviceID: String) {
+        let hashes = Self.changes(current: identifiers.encodedFields, sentHashes: [:]).hashes
+        guard !hashes.isEmpty else { return }
+        save(Sent(deviceID: deviceID, hashes: loadSent(deviceID: deviceID).merging(hashes) { _, new in new }))
+    }
+
     /// The fields to send (a value, or `NSNull` to clear one sent before) and the hashes to store
     /// once the server answered.
     static func changes(current: [String: Data], sentHashes: [String: String]) -> (fields: [String: Any], hashes: [String: String]) {
